@@ -1,0 +1,21 @@
+{
+  "Alice": {
+    "blocked_times": [
+      {"day": "Monday", "start": "09:00", "end": "10:00"},
+      {"day": "Wednesday", "start": "14:00", "end": "15:30"}
+    ]
+  },
+  "Bob": {
+    "blocked_times": [
+      {"day": "Tuesday", "start": "10:00", "end": "11:00"},
+      {"day": "Thursday", "start": "13:00", "end": "14:00"}
+    ]
+  },
+  "Charlie": {
+    "blocked_times": [
+      {"day": "Monday", "start": "13:00", "end": "14:00"},
+      {"day": "Friday", "start": "11:00", "end": "12:00"}
+    ]
+  }
+}
+

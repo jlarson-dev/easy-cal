@@ -9,13 +9,60 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     day: 'Monday',
     start: '09:00',
     end: '10:00',
-    label: ''
+    label: '',
+    isDaily: false
   });
   const isInitialMount = useRef(true);
   const prevStudentsRef = useRef(null);
   const isUserAction = useRef(false);
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+  // Convert 24-hour time to 12-hour format
+  const to12Hour = (time24) => {
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+  };
+
+  // Convert 12-hour time to 24-hour format
+  const to24Hour = (time12) => {
+    if (!time12) return '';
+    // Try to match various formats: "9:00 AM", "9:00AM", "09:00 AM", etc.
+    const match = time12.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) {
+      // If it's already in 24-hour format, return as-is
+      if (time12.match(/^\d{2}:\d{2}$/)) {
+        return time12;
+      }
+      return time12; // Return as-is if format is wrong
+    }
+    
+    let hour = parseInt(match[1]);
+    const minutes = match[2];
+    const ampm = match[3].toUpperCase();
+    
+    if (hour < 1 || hour > 12) return time12; // Invalid hour
+    
+    if (ampm === 'PM' && hour !== 12) {
+      hour += 12;
+    } else if (ampm === 'AM' && hour === 12) {
+      hour = 0;
+    }
+    
+    return `${hour.toString().padStart(2, '0')}:${minutes}`;
+  };
+
+  // Handle time input change (time input uses 24-hour internally)
+  const handleTimeChange = (field, value) => {
+    setFormData({
+      ...formData,
+      [field]: value
+    });
+  };
 
   // Helper to create a stable key for comparing students objects
   const getStudentsKey = (studentsObj, names) => {
@@ -91,31 +138,70 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       return;
     }
 
-    const newBlockedTime = {
-      day: formData.day,
-      start: formData.start,
-      end: formData.end,
-      label: formData.label.trim() || null
-    };
-
     isUserAction.current = true;
     setStudentSchedules(prevSchedules => {
-      if (editingIndex !== null && editingStudent === studentName) {
-        // Update existing
-        const updated = [...(prevSchedules[studentName] || [])];
-        updated[editingIndex] = newBlockedTime;
-        return {
-          ...prevSchedules,
-          [studentName]: updated
-        };
-      } else {
-        // Add new
-        const currentTimes = prevSchedules[studentName] || [];
-        return {
-          ...prevSchedules,
-          [studentName]: [...currentTimes, newBlockedTime]
-        };
-      }
+      const currentTimes = prevSchedules[studentName] || [];
+      
+        if (editingIndex !== null && editingStudent === studentName) {
+          // Update existing - if daily, update all instances
+          if (formData.isDaily) {
+            const updated = currentTimes.filter(bt => 
+              !(weekdays.includes(bt.day) && bt.start === formData.start && bt.end === formData.end)
+            );
+            weekdays.forEach(day => {
+              updated.push({
+                day,
+                start: formData.start,
+                end: formData.end,
+                label: formData.label.trim() || null
+              });
+            });
+            return {
+              ...prevSchedules,
+              [studentName]: updated
+            };
+          } else {
+            // Update single day
+            const updated = [...currentTimes];
+            updated[editingIndex] = {
+              day: formData.day,
+              start: formData.start,
+              end: formData.end,
+              label: formData.label.trim() || null
+            };
+            return {
+              ...prevSchedules,
+              [studentName]: updated
+            };
+          }
+        } else {
+          // Add new
+          if (formData.isDaily) {
+            // Add to all weekdays
+            const newTimes = weekdays.map(day => ({
+              day,
+              start: formData.start,
+              end: formData.end,
+              label: formData.label.trim() || null
+            }));
+            return {
+              ...prevSchedules,
+              [studentName]: [...currentTimes, ...newTimes]
+            };
+          } else {
+            // Add to single day
+            const newBlockedTime = {
+              day: formData.day,
+              start: formData.start,
+              end: formData.end,
+              label: formData.label.trim() || null
+            };
+            return {
+              ...prevSchedules,
+              [studentName]: [...currentTimes, newBlockedTime]
+            };
+          }
+        }
     });
 
     setEditingIndex(null);
@@ -126,7 +212,8 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       day: 'Monday',
       start: '09:00',
       end: '10:00',
-      label: ''
+      label: '',
+      isDaily: false
     });
   };
 
@@ -136,7 +223,8 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       day: blockedTime.day,
       start: blockedTime.start,
       end: blockedTime.end,
-      label: blockedTime.label || ''
+      label: blockedTime.label || '',
+      isDaily: false // Don't auto-detect daily, let user decide
     });
     setEditingIndex(index);
     setEditingStudent(studentName);
@@ -167,7 +255,8 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       day: 'Monday',
       start: '09:00',
       end: '10:00',
-      label: ''
+      label: '',
+      isDaily: false
     });
   };
 
@@ -240,10 +329,11 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
                   <h4>{isEditing ? 'Edit' : 'Add'} Blocked Time</h4>
                   <div className="blocked-time-form-inline">
                     <label>
-                      Day:
+                      {formData.isDaily ? 'Days: Monday-Friday' : 'Day:'}
                       <select
                         value={formData.day}
                         onChange={(e) => setFormData({ ...formData, day: e.target.value })}
+                        disabled={formData.isDaily}
                       >
                         {daysOfWeek.map(day => (
                           <option key={day} value={day}>{day}</option>
@@ -255,7 +345,7 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
                       <input
                         type="time"
                         value={formData.start}
-                        onChange={(e) => setFormData({ ...formData, start: e.target.value })}
+                        onChange={(e) => handleTimeChange('start', e.target.value)}
                       />
                     </label>
                     <label>
@@ -263,7 +353,7 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
                       <input
                         type="time"
                         value={formData.end}
-                        onChange={(e) => setFormData({ ...formData, end: e.target.value })}
+                        onChange={(e) => handleTimeChange('end', e.target.value)}
                       />
                     </label>
                     <label>
@@ -274,6 +364,14 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
                         value={formData.label}
                         onChange={(e) => setFormData({ ...formData, label: e.target.value })}
                       />
+                    </label>
+                    <label className="checkbox-label-inline">
+                      <input
+                        type="checkbox"
+                        checked={formData.isDaily}
+                        onChange={(e) => setFormData({ ...formData, isDaily: e.target.checked })}
+                      />
+                      Apply to all weekdays (M-F)
                     </label>
                     <div className="form-actions-inline">
                       <button
@@ -326,7 +424,7 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
                               return (
                                 <div key={`${day}-${dayIndex}`} className="blocked-time-item-compact">
                                   <div className="blocked-time-info-compact">
-                                    <span className="time-range">{bt.start} - {bt.end}</span>
+                                    <span className="time-range">{to12Hour(bt.start)} - {to12Hour(bt.end)}</span>
                                     {bt.label && (
                                       <span className="blocked-time-label-badge">{bt.label}</span>
                                     )}

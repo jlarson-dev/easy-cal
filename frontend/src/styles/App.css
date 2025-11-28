@@ -471,6 +471,13 @@ body {
   text-align: center;
 }
 
+.blocked-label-text {
+  font-weight: normal;
+  font-style: italic;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
 .export-section {
   background: #f9f9f9;
   padding: 1.5rem;
@@ -541,6 +548,546 @@ body {
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 1200px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.modal-header h2 {
+  color: #667eea;
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.modal-close:hover {
+  background: #f0f0f0;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 1.5rem;
+  border-top: 2px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.save-button {
+  padding: 0.75rem 2rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.save-button:hover {
+  background: #5568d3;
+}
+
+.cancel-button {
+  padding: 0.75rem 2rem;
+  background: #ccc;
+  color: #333;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+
+.cancel-button:hover {
+  background: #bbb;
+}
+
+/* Schedule Manager Styles */
+.schedule-form-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+.blocked-time-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.blocked-time-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.blocked-time-form input,
+.blocked-time-form select {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.schedule-calendar-section {
+  margin-bottom: 2rem;
+}
+
+.schedule-grid {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.schedule-header {
+  display: grid;
+  grid-template-columns: 100px repeat(auto-fit, minmax(120px, 1fr));
+  background: #667eea;
+  color: white;
+  font-weight: 600;
+}
+
+.time-column-header,
+.day-column-header {
+  padding: 0.75rem;
+  text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.schedule-rows {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.schedule-row {
+  display: grid;
+  grid-template-columns: 100px repeat(auto-fit, minmax(120px, 1fr));
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.schedule-row:last-child {
+  border-bottom: none;
+}
+
+.time-cell {
+  padding: 0.5rem;
+  background: #f9f9f9;
+  border-right: 1px solid #e0e0e0;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.schedule-cell {
+  padding: 0.25rem;
+  border-right: 1px solid #e0e0e0;
+  min-height: 30px;
+  position: relative;
+}
+
+.schedule-cell.blocked {
+  background: #ffcccc;
+}
+
+.schedule-cell.blocked-start {
+  background: #ff9999;
+}
+
+.blocked-time-info {
+  font-size: 0.8rem;
+  padding: 0.25rem;
+}
+
+.blocked-time-range {
+  font-weight: 600;
+  color: #c33;
+}
+
+.blocked-time-label {
+  color: #666;
+  font-style: italic;
+  margin-top: 0.25rem;
+}
+
+.blocked-times-list {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+.blocked-times-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.blocked-time-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.blocked-time-details {
+  flex: 1;
+}
+
+.blocked-time-label-badge {
+  background: #667eea;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+.blocked-time-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edit-button {
+  padding: 0.5rem 1rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.edit-button:hover {
+  background: #5568d3;
+}
+
+/* Settings Section */
+.settings-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #f0f7ff;
+  border-radius: 4px;
+  border: 2px solid #667eea;
+}
+
+.settings-section h3 {
+  color: #667eea;
+  margin-bottom: 1rem;
+}
+
+.subject-management {
+  margin-top: 1rem;
+}
+
+.add-subject-input {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.add-subject-input input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.master-subjects-list h4 {
+  color: #667eea;
+  margin-bottom: 0.5rem;
+}
+
+.subjects-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.subject-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 2px solid #667eea;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* Student Schedules View */
+.schedules-view-section {
+  margin-bottom: 2rem;
+  padding: 2rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.schedules-view-section h2 {
+  color: #667eea;
+  margin-bottom: 0.5rem;
+  font-size: 1.8rem;
+}
+
+.section-description {
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.empty-message {
+  color: #999;
+  font-style: italic;
+  padding: 1rem;
+  text-align: center;
+}
+
+.student-schedule-card {
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.student-schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: #f0f0f0;
+  cursor: pointer;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.student-schedule-header:hover {
+  background: #e8e8e8;
+}
+
+.student-schedule-header h3 {
+  color: #667eea;
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.student-schedule-stats {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.expand-icon {
+  font-size: 0.8rem;
+  color: #667eea;
+}
+
+.student-schedule-content {
+  padding: 1.5rem;
+  background: white;
+}
+
+.blocked-time-form-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+.blocked-time-form-section h4 {
+  color: #667eea;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.blocked-time-form-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.blocked-time-form-inline label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.blocked-time-form-inline input,
+.blocked-time-form-inline select {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.form-actions-inline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.blocked-times-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.day-blocked-times {
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 4px;
+  border-left: 4px solid #667eea;
+}
+
+.day-blocked-times h5 {
+  color: #667eea;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.blocked-times-items-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.blocked-time-item-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.blocked-time-info-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.time-range {
+  font-weight: 600;
+  color: #333;
+  min-width: 120px;
+}
+
+.no-label-hint {
+  color: #999;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.blocked-time-actions-compact {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.label-button {
+  padding: 0.4rem 0.8rem;
+  background: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+.label-button:hover {
+  background: #138496;
+}
+
+.edit-button.small,
+.cancel-button.small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 768px) {
   .app-main {
     padding: 1rem;
@@ -560,6 +1107,25 @@ body {
 
   .subject-row {
     flex-wrap: wrap;
+  }
+
+  .modal-content {
+    max-width: 100%;
+    margin: 1rem;
+  }
+
+  .schedule-header,
+  .schedule-row {
+    grid-template-columns: 80px repeat(auto-fit, minmax(100px, 1fr));
+  }
+
+  .time-column-header,
+  .time-cell {
+    width: 80px;
+  }
+
+  .blocked-time-form {
+    grid-template-columns: 1fr;
   }
 }
 

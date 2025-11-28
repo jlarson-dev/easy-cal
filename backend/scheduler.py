@@ -136,25 +136,16 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
         scheduled_hours[config.name] = {subj.name: 0.0 for subj in config.subjects}
         daily_hours[config.name] = {}
     
-    # Add lunch and prep time slots
+    # Add lunch time slots (fixed)
     lunch_mins = time_to_minutes(request.lunch_time)
-    prep_mins = time_to_minutes(request.prep_time)
     
     for day in request.working_hours.days:
-        # Add lunch
+        # Add lunch (fixed time)
         schedule.append(TimeSlot(
             day=day,
             start=request.lunch_time,
             end=minutes_to_time(lunch_mins + 60),
             type="lunch"
-        ))
-        
-        # Add prep
-        schedule.append(TimeSlot(
-            day=day,
-            start=request.prep_time,
-            end=minutes_to_time(prep_mins + 60),
-            type="prep"
         ))
         
         # Initialize daily hours tracking
@@ -172,11 +163,9 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
             slot_duration
         )
         
-        # Add lunch and prep as blocked times
+        # Add lunch as blocked time (prep will be scheduled flexibly later)
         lunch_start = lunch_mins
         lunch_end = lunch_mins + 60
-        prep_start = prep_mins
-        prep_end = prep_mins + 60
         
         # Add lunch blocked slots
         current = lunch_start
@@ -184,31 +173,31 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
             slot_end = min(current + slot_duration, lunch_end)
             blocked_by_day[day].append((current, slot_end))
             current = slot_end
-        
-        # Add prep blocked slots
-        current = prep_start
-        while current < prep_end:
-            slot_end = min(current + slot_duration, prep_end)
-            blocked_by_day[day].append((current, slot_end))
-            current = slot_end
     
     # Add blocked time slots to schedule (student blocked times)
     for day in request.working_hours.days:
-        # Only add student blocked times, not lunch/prep (they're added separately)
-        student_blocked = get_blocked_slots_for_day(
-            day,
-            request.students,
-            request.working_hours.start_time,
-            request.working_hours.end_time,
-            slot_duration
-        )
-        for blocked_start, blocked_end in student_blocked:
-            schedule.append(TimeSlot(
-                day=day,
-                start=minutes_to_time(blocked_start),
-                end=minutes_to_time(blocked_end),
-                type="blocked"
-            ))
+        # Get blocked times with labels for this day
+        for student_name, student_schedule in request.students.items():
+            for blocked_time in student_schedule.blocked_times:
+                if blocked_time.day.lower() == day.lower():
+                    # Check if within working hours
+                    blocked_start_mins = time_to_minutes(blocked_time.start)
+                    blocked_end_mins = time_to_minutes(blocked_time.end)
+                    work_start_mins = time_to_minutes(request.working_hours.start_time)
+                    work_end_mins = time_to_minutes(request.working_hours.end_time)
+                    
+                    if blocked_end_mins > work_start_mins and blocked_start_mins < work_end_mins:
+                        # Clip to working hours
+                        start_mins = max(blocked_start_mins, work_start_mins)
+                        end_mins = min(blocked_end_mins, work_end_mins)
+                        
+                        schedule.append(TimeSlot(
+                            day=day,
+                            start=minutes_to_time(start_mins),
+                            end=minutes_to_time(end_mins),
+                            type="blocked",
+                            label=blocked_time.label
+                        ))
     
     # Generate available slots for each day
     available_by_day: Dict[str, List[tuple]] = {}
@@ -265,16 +254,13 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                     slot_start_mins = consecutive_slots[0][0]
                     slot_end_mins = consecutive_slots[-1][1]
                     
-                    # Double-check: ensure no overlap with lunch/prep (shouldn't happen, but safety check)
+                    # Double-check: ensure no overlap with lunch (shouldn't happen, but safety check)
                     lunch_start_mins = lunch_mins
                     lunch_end_mins = lunch_mins + 60
-                    prep_start_mins = prep_mins
-                    prep_end_mins = prep_mins + 60
                     
                     overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
-                    overlaps_prep = not (slot_end_mins <= prep_start_mins or slot_start_mins >= prep_end_mins)
                     
-                    if not overlaps_lunch and not overlaps_prep:
+                    if not overlaps_lunch:
                         # Create session
                         schedule.append(TimeSlot(
                             day=day,
@@ -294,6 +280,77 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                         available_slots = available_slots[i + slots_needed:]
                         available_by_day[day] = available_slots
                         break
+    
+    # Schedule flexible prep time (1 hour per day if required)
+    if request.prep_time_required:
+        for day in request.working_hours.days:
+            # Recalculate available slots for this day (excluding scheduled sessions and lunch)
+            # Get all scheduled session times for this day
+            scheduled_sessions = [
+                (time_to_minutes(s.start), time_to_minutes(s.end))
+                for s in schedule
+                if s.day == day and s.type == "session"
+            ]
+            
+            # Combine with lunch and student blocked times
+            all_blocked = blocked_by_day[day].copy()
+            all_blocked.extend(scheduled_sessions)
+            all_blocked.sort(key=lambda x: x[0])
+            
+            # Generate available slots
+            day_available = generate_available_slots(
+                day,
+                request.working_hours.start_time,
+                request.working_hours.end_time,
+                all_blocked,
+                slot_duration
+            )
+            
+            # Try to find a 1-hour slot (2 consecutive 30-minute slots)
+            prep_scheduled = False
+            for i in range(len(day_available) - 1):
+                slot1 = day_available[i]
+                slot2 = day_available[i + 1]
+                
+                # Check if slots are consecutive and total 1 hour
+                if slot1[1] == slot2[0] and (slot2[1] - slot1[0]) >= 60:
+                    # Found 1-hour slot
+                    prep_start = slot1[0]
+                    prep_end = slot1[0] + 60
+                    
+                    schedule.append(TimeSlot(
+                        day=day,
+                        start=minutes_to_time(prep_start),
+                        end=minutes_to_time(prep_end),
+                        type="prep"
+                    ))
+                    prep_scheduled = True
+                    break
+            
+            # If no 1-hour slot found, try 2x 30-minute slots
+            if not prep_scheduled and len(day_available) >= 2:
+                # Take first two available slots if they're at least 30 minutes each
+                slot1 = day_available[0]
+                slot2 = day_available[1] if len(day_available) > 1 else None
+                
+                if slot2 and (slot2[1] - slot1[0]) >= 60:
+                    # Schedule as two 30-minute prep slots
+                    schedule.append(TimeSlot(
+                        day=day,
+                        start=minutes_to_time(slot1[0]),
+                        end=minutes_to_time(slot1[0] + 30),
+                        type="prep"
+                    ))
+                    schedule.append(TimeSlot(
+                        day=day,
+                        start=minutes_to_time(slot1[0] + 30),
+                        end=minutes_to_time(slot1[0] + 60),
+                        type="prep"
+                    ))
+                    prep_scheduled = True
+            
+            if not prep_scheduled:
+                conflicts.append(f"Could not schedule prep time on {day}")
     
     # Check if we met all requirements
     for student_config in request.student_configs:

@@ -7,6 +7,7 @@ class BlockedTime(BaseModel):
     day: str
     start: str  # Format: "HH:MM"
     end: str    # Format: "HH:MM"
+    label: Optional[str] = None  # Optional label/description for display
 
 
 class StudentSchedule(BaseModel):
@@ -37,7 +38,7 @@ class ScheduleRequest(BaseModel):
     student_configs: List[StudentConfig]
     working_hours: WorkingHours
     lunch_time: str  # Format: "HH:MM"
-    prep_time: str   # Format: "HH:MM"
+    prep_time_required: bool = True  # Whether to include 1 hour prep time daily (flexible scheduling)
 
 
 class TimeSlot(BaseModel):
@@ -47,6 +48,7 @@ class TimeSlot(BaseModel):
     student: Optional[str] = None
     subject: Optional[str] = None
     type: str  # "session", "lunch", "prep", "blocked"
+    label: Optional[str] = None  # Optional label for blocked times
 
 
 class ScheduleResponse(BaseModel):

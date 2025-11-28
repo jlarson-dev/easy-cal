@@ -62,11 +62,11 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
       content = JSON.stringify(scheduleData, null, 2);
       filename += '.json';
     } else if (exportFormat === 'csv') {
-      // CSV format: Day, Start, End, Type, Student, Subject
-      const rows = ['Day,Start,End,Type,Student,Subject'];
+      // CSV format: Day, Start, End, Type, Student, Subject, Label
+      const rows = ['Day,Start,End,Type,Student,Subject,Label'];
       schedule.forEach(slot => {
         rows.push(
-          `${slot.day},${slot.start},${slot.end},${slot.type},${slot.student || ''},${slot.subject || ''}`
+          `${slot.day},${slot.start},${slot.end},${slot.type},${slot.student || ''},${slot.subject || ''},${slot.label || ''}`
         );
       });
       content = rows.join('\n');
@@ -85,7 +85,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
           } else if (slot.type === 'prep') {
             lines.push(`  ${slot.start} - ${slot.end}: PREP TIME`);
           } else if (slot.type === 'blocked') {
-            lines.push(`  ${slot.start} - ${slot.end}: BLOCKED`);
+            lines.push(`  ${slot.start} - ${slot.end}: BLOCKED${slot.label ? ` - ${slot.label}` : ''}`);
           }
         });
       });
@@ -134,7 +134,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
                   key={index}
                   className="time-slot"
                   style={{ backgroundColor: getSlotColor(slot) }}
-                  title={`${slot.start} - ${slot.end}: ${slot.type === 'session' ? `${slot.student} - ${slot.subject}` : slot.type.toUpperCase()}`}
+                  title={`${slot.start} - ${slot.end}: ${slot.type === 'session' ? `${slot.student} - ${slot.subject}` : slot.type.toUpperCase()}${slot.type === 'blocked' && slot.label ? ` - ${slot.label}` : ''}`}
                 >
                   <div className="slot-time">{formatTime(slot.start)} - {formatTime(slot.end)}</div>
                   {slot.type === 'session' && (
@@ -145,7 +145,11 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
                   )}
                   {slot.type === 'lunch' && <div className="slot-label">LUNCH</div>}
                   {slot.type === 'prep' && <div className="slot-label">PREP</div>}
-                  {slot.type === 'blocked' && <div className="slot-label">BLOCKED</div>}
+                  {slot.type === 'blocked' && (
+                    <div className="slot-label">
+                      BLOCKED{slot.label && <span className="blocked-label-text">: {slot.label}</span>}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

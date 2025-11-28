@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import StudentScheduleUpload from './components/StudentScheduleUpload';
+import StudentSchedulesView from './components/StudentSchedulesView';
 import SubjectConfiguration from './components/SubjectConfiguration';
 import ScheduleDisplay from './components/ScheduleDisplay';
 import { generateSchedule } from './services/api';
@@ -7,6 +8,7 @@ import './styles/App.css';
 
 function App() {
   const [uploadedStudents, setUploadedStudents] = useState({});
+  const [managedSchedules, setManagedSchedules] = useState({}); // Manually managed schedules
   const [config, setConfig] = useState(null);
   const [schedule, setSchedule] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -14,11 +16,57 @@ function App() {
 
   const handleUploadSuccess = (students) => {
     setUploadedStudents(students);
+    // Also update managed schedules to include uploaded students
+    const merged = { ...managedSchedules };
+    Object.keys(students).forEach(studentName => {
+      if (!merged[studentName]) {
+        merged[studentName] = students[studentName].blocked_times || [];
+      }
+    });
+    setManagedSchedules(merged);
   };
+
+  const handleSchedulesUpdate = useCallback((updatedSchedules) => {
+    setManagedSchedules(updatedSchedules);
+  }, []);
 
   const handleConfigChange = (newConfig) => {
     setConfig(newConfig);
   };
+
+  // Merge uploaded and manually managed schedules (memoized to prevent unnecessary re-renders)
+  const studentSchedulesData = useMemo(() => {
+    const merged = {};
+    
+    // Add uploaded students
+    Object.keys(uploadedStudents).forEach(studentName => {
+      merged[studentName] = {
+        blocked_times: uploadedStudents[studentName].blocked_times || []
+      };
+    });
+    
+    // Add/update with managed schedules (managed takes precedence)
+    Object.keys(managedSchedules).forEach(studentName => {
+      merged[studentName] = {
+        blocked_times: managedSchedules[studentName]
+      };
+    });
+    
+    return merged;
+  }, [uploadedStudents, managedSchedules]);
+
+  // Get all student names from both uploaded and config (memoized)
+  const allStudentNames = useMemo(() => {
+    const names = new Set();
+    Object.keys(uploadedStudents).forEach(name => names.add(name));
+    Object.keys(managedSchedules).forEach(name => names.add(name));
+    if (config && config.students) {
+      config.students.forEach(student => {
+        if (student.name) names.add(student.name);
+      });
+    }
+    return Array.from(names);
+  }, [uploadedStudents, managedSchedules, config]);
 
   const handleGenerate = async () => {
     if (!config) {
@@ -52,17 +100,21 @@ function App() {
           end_time: config.workingHours.end_time
         },
         lunch_time: config.lunchTime,
-        prep_time: config.prepTime
+        prep_time_required: config.prepTimeRequired !== undefined ? config.prepTimeRequired : true
       };
 
-      // Add student schedules (from upload or empty)
+      // Get merged student schedules
+      const allStudentSchedules = studentSchedulesData;
+
+      // Add student schedules (from upload/managed or empty)
       config.students.forEach(student => {
-        if (uploadedStudents[student.name]) {
+        if (allStudentSchedules[student.name]) {
           scheduleRequest.students[student.name] = {
-            blocked_times: uploadedStudents[student.name].blocked_times.map(bt => ({
+            blocked_times: allStudentSchedules[student.name].blocked_times.map(bt => ({
               day: bt.day,
               start: bt.start,
-              end: bt.end
+              end: bt.end,
+              label: bt.label || null
             }))
           };
         } else {
@@ -106,9 +158,15 @@ function App() {
           <section className="input-section">
             <StudentScheduleUpload onUploadSuccess={handleUploadSuccess} />
             
+            <StudentSchedulesView
+              students={studentSchedulesData}
+              studentNames={allStudentNames}
+              onUpdate={handleSchedulesUpdate}
+            />
+            
             <SubjectConfiguration
               onConfigChange={handleConfigChange}
-              uploadedStudents={Object.keys(uploadedStudents)}
+              uploadedStudents={allStudentNames}
             />
 
             <div className="generate-section">

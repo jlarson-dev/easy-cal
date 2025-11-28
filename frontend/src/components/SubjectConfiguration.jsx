@@ -1,14 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
+  // Load subjects from localStorage or use defaults
+  const loadSubjects = () => {
+    const saved = localStorage.getItem('masterSubjects');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return ['Math', 'Language', 'Writing', 'Reading', 'Science'];
+  };
+
+  const [masterSubjects, setMasterSubjects] = useState(loadSubjects());
+  const [newSubjectName, setNewSubjectName] = useState('');
   const [workingHours, setWorkingHours] = useState({
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
     start_time: '08:00',
     end_time: '17:00'
   });
   const [lunchTime, setLunchTime] = useState('12:00');
-  const [prepTime, setPrepTime] = useState('16:00');
+  const [prepTimeRequired, setPrepTimeRequired] = useState(true);
   const [students, setStudents] = useState([]);
+
+  // Save subjects to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('masterSubjects', JSON.stringify(masterSubjects));
+  }, [masterSubjects]);
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -75,25 +91,83 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
     notifyConfigChange();
   };
 
+  const addSubjectToMaster = () => {
+    if (newSubjectName.trim() && !masterSubjects.includes(newSubjectName.trim())) {
+      setMasterSubjects([...masterSubjects, newSubjectName.trim()]);
+      setNewSubjectName('');
+    }
+  };
+
+  const removeSubjectFromMaster = (subjectName) => {
+    setMasterSubjects(masterSubjects.filter(s => s !== subjectName));
+    // Also remove from all students' subject lists
+    const updated = students.map(student => ({
+      ...student,
+      subjects: student.subjects.filter(s => s.name !== subjectName)
+    }));
+    setStudents(updated);
+    notifyConfigChange();
+  };
+
   const notifyConfigChange = () => {
     if (onConfigChange) {
       onConfigChange({
         students,
         workingHours,
         lunchTime,
-        prepTime
+        prepTimeRequired
       });
     }
   };
 
   React.useEffect(() => {
     notifyConfigChange();
-  }, [lunchTime, prepTime, workingHours]);
+  }, [lunchTime, prepTimeRequired, workingHours, students]);
 
   return (
     <div className="config-section">
       <h2>Subject Configuration</h2>
       
+      <div className="settings-section">
+        <h3>Subject Settings</h3>
+        <p>Manage the list of available subjects. These will appear in the dropdown when adding subjects to students.</p>
+        <div className="subject-management">
+          <div className="add-subject-input">
+            <input
+              type="text"
+              placeholder="Enter subject name"
+              value={newSubjectName}
+              onChange={(e) => setNewSubjectName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addSubjectToMaster()}
+            />
+            <button onClick={addSubjectToMaster} className="add-button small">
+              + Add Subject
+            </button>
+          </div>
+          <div className="master-subjects-list">
+            <h4>Available Subjects:</h4>
+            {masterSubjects.length === 0 ? (
+              <p>No subjects added yet. Add subjects above.</p>
+            ) : (
+              <div className="subjects-tags">
+                {masterSubjects.map((subject, index) => (
+                  <div key={index} className="subject-tag">
+                    <span>{subject}</span>
+                    <button
+                      onClick={() => removeSubjectFromMaster(subject)}
+                      className="remove-button small"
+                      title="Remove subject"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="working-hours-section">
         <h3>Working Hours</h3>
         <div className="time-inputs">
@@ -151,16 +225,16 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
               }}
             />
           </label>
-          <label>
-            Prep Time:
+          <label className="checkbox-label">
             <input
-              type="time"
-              value={prepTime}
+              type="checkbox"
+              checked={prepTimeRequired}
               onChange={(e) => {
-                setPrepTime(e.target.value);
+                setPrepTimeRequired(e.target.checked);
                 notifyConfigChange();
               }}
             />
+            Include 1 hour prep time daily (flexible scheduling)
           </label>
         </div>
       </div>
@@ -215,12 +289,18 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
               
               {student.subjects.map((subject, subjectIndex) => (
                 <div key={subjectIndex} className="subject-row">
-                  <input
-                    type="text"
-                    placeholder="Subject name"
-                    value={subject.name}
-                    onChange={(e) => updateSubject(studentIndex, subjectIndex, 'name', e.target.value)}
-                  />
+                  <label>
+                    Subject:
+                    <select
+                      value={subject.name}
+                      onChange={(e) => updateSubject(studentIndex, subjectIndex, 'name', e.target.value)}
+                    >
+                      <option value="">Select a subject</option>
+                      {masterSubjects.map(subj => (
+                        <option key={subj} value={subj}>{subj}</option>
+                      ))}
+                    </select>
+                  </label>
                   <label>
                     Hours/Week:
                     <input

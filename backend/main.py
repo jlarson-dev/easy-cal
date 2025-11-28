@@ -84,7 +84,8 @@ async def upload_schedule(file: UploadFile = File(...)):
                         {
                             "day": bt.day,
                             "start": bt.start,
-                            "end": bt.end
+                            "end": bt.end,
+                            "label": bt.label if hasattr(bt, 'label') and bt.label else None
                         }
                         for bt in schedule.blocked_times
                     ]

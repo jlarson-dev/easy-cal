@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
+  const [customStudentNames, setCustomStudentNames] = useState(new Set());
   // Load subjects from localStorage or use defaults
   const loadSubjects = () => {
     const saved = localStorage.getItem('masterSubjects');
@@ -45,6 +46,12 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
   const updateStudent = (index, field, value) => {
     const updated = [...students];
     updated[index] = { ...updated[index], [field]: value };
+    
+    // Track custom student names
+    if (field === 'name' && value && !uploadedStudents.includes(value)) {
+      setCustomStudentNames(prev => new Set([...prev, value]));
+    }
+    
     setStudents(updated);
     notifyConfigChange();
   };
@@ -246,13 +253,40 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
         {students.map((student, studentIndex) => (
           <div key={studentIndex} className="student-card">
             <div className="student-header">
-              <input
-                type="text"
-                placeholder="Student name"
-                value={student.name}
-                onChange={(e) => updateStudent(studentIndex, 'name', e.target.value)}
-                className="student-name-input"
-              />
+              {uploadedStudents.length > 0 ? (
+                <select
+                  value={student.name}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      // Switch to text input for custom name
+                      const input = prompt('Enter student name:');
+                      if (input && input.trim()) {
+                        updateStudent(studentIndex, 'name', input.trim());
+                      }
+                    } else {
+                      updateStudent(studentIndex, 'name', e.target.value);
+                    }
+                  }}
+                  className="student-name-select"
+                >
+                  <option value="">Select a student...</option>
+                  {uploadedStudents.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                  {Array.from(customStudentNames).map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                  <option value="__custom__">+ Add custom student name</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Student name"
+                  value={student.name}
+                  onChange={(e) => updateStudent(studentIndex, 'name', e.target.value)}
+                  className="student-name-input"
+                />
+              )}
               <button onClick={() => removeStudent(studentIndex)} className="remove-button">
                 Remove
               </button>

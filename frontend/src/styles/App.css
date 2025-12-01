@@ -239,13 +239,20 @@ body {
   margin-bottom: 1rem;
 }
 
-.student-name-input {
+.student-name-input,
+.student-name-select {
   flex: 1;
   padding: 0.75rem;
   border: 2px solid #ddd;
   border-radius: 4px;
   font-size: 1.1rem;
   font-weight: 600;
+  background: white;
+  cursor: pointer;
+}
+
+.student-name-select {
+  min-width: 200px;
 }
 
 .remove-button {
@@ -891,6 +898,21 @@ body {
   cursor: pointer;
 }
 
+.checkbox-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.checkbox-label-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* Student Schedules View */
 .schedules-view-section {
   margin-bottom: 2rem;
@@ -992,6 +1014,7 @@ body {
   gap: 0.5rem;
   font-size: 0.9rem;
 }
+
 
 .blocked-time-form-inline input,
 .blocked-time-form-inline select {

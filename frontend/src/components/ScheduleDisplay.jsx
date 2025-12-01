@@ -62,11 +62,14 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
       content = JSON.stringify(scheduleData, null, 2);
       filename += '.json';
     } else if (exportFormat === 'csv') {
-      // CSV format: Day, Start, End, Type, Student, Subject, Label
-      const rows = ['Day,Start,End,Type,Student,Subject,Label'];
+      // CSV format: Day, Start, End, Type, Student(s), Subject, Label
+      const rows = ['Day,Start,End,Type,Student(s),Subject,Label'];
       schedule.forEach(slot => {
+        const students = slot.students && slot.students.length > 0
+          ? slot.students.join('; ')
+          : (slot.student || '');
         rows.push(
-          `${slot.day},${slot.start},${slot.end},${slot.type},${slot.student || ''},${slot.subject || ''},${slot.label || ''}`
+          `${slot.day},${slot.start},${slot.end},${slot.type},"${students}",${slot.subject || ''},${slot.label || ''}`
         );
       });
       content = rows.join('\n');
@@ -79,7 +82,10 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
         lines.push('─'.repeat(50));
         scheduleByDay[day]?.forEach(slot => {
           if (slot.type === 'session') {
-            lines.push(`  ${slot.start} - ${slot.end}: ${slot.student} - ${slot.subject}`);
+            const students = slot.students && slot.students.length > 0
+              ? slot.students.join(', ')
+              : slot.student;
+            lines.push(`  ${slot.start} - ${slot.end}: ${students} - ${slot.subject}`);
           } else if (slot.type === 'lunch') {
             lines.push(`  ${slot.start} - ${slot.end}: LUNCH`);
           } else if (slot.type === 'prep') {
@@ -134,12 +140,16 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
                   key={index}
                   className="time-slot"
                   style={{ backgroundColor: getSlotColor(slot) }}
-                  title={`${slot.start} - ${slot.end}: ${slot.type === 'session' ? `${slot.student} - ${slot.subject}` : slot.type.toUpperCase()}${slot.type === 'blocked' && slot.label ? ` - ${slot.label}` : ''}`}
+                  title={`${slot.start} - ${slot.end}: ${slot.type === 'session' ? `${slot.students ? slot.students.join(', ') : slot.student} - ${slot.subject}` : slot.type.toUpperCase()}${slot.type === 'blocked' && slot.label ? ` - ${slot.label}` : ''}`}
                 >
                   <div className="slot-time">{formatTime(slot.start)} - {formatTime(slot.end)}</div>
                   {slot.type === 'session' && (
                     <>
-                      <div className="slot-student">{slot.student}</div>
+                      <div className="slot-student">
+                        {slot.students && slot.students.length > 0
+                          ? slot.students.join(', ')
+                          : slot.student}
+                      </div>
                       <div className="slot-subject">{slot.subject}</div>
                     </>
                   )}

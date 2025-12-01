@@ -87,8 +87,10 @@ async def upload_schedule(
             blocked_times = [
                 BlockedTime(**bt) for bt in schedule_data.get("blocked_times", [])
             ]
+            can_overlap = schedule_data.get("can_overlap", [])
             student_schedules[student_name] = StudentSchedule(
-                blocked_times=blocked_times
+                blocked_times=blocked_times,
+                can_overlap=can_overlap or []
             )
         
         # Check for existing schedules

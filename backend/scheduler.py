@@ -116,6 +116,60 @@ def generate_available_slots(
     return available
 
 
+def can_students_overlap(student1: str, student2: str, student_schedules: Dict[str, StudentSchedule]) -> bool:
+    """Check if two students can overlap (bidirectional check)"""
+    if student1 not in student_schedules or student2 not in student_schedules:
+        return False
+    
+    schedule1 = student_schedules[student1]
+    schedule2 = student_schedules[student2]
+    
+    # Check bidirectional: student1 must have student2 in can_overlap, and vice versa
+    can_overlap_1 = schedule1.can_overlap or []
+    can_overlap_2 = schedule2.can_overlap or []
+    
+    return student2 in can_overlap_1 and student1 in can_overlap_2
+
+
+def check_all_can_overlap(student_names: List[str], student_schedules: Dict[str, StudentSchedule]) -> bool:
+    """Check if all students in a list can overlap with each other (all pairs must be valid)"""
+    if len(student_names) < 2:
+        return True  # Single student or empty list
+    
+    # Check all pairs
+    for i in range(len(student_names)):
+        for j in range(i + 1, len(student_names)):
+            if not can_students_overlap(student_names[i], student_names[j], student_schedules):
+                return False
+    
+    return True
+
+
+def are_students_blocked_at_time(
+    student_names: List[str],
+    day: str,
+    slot_start_mins: int,
+    slot_end_mins: int,
+    student_schedules: Dict[str, StudentSchedule]
+) -> bool:
+    """Check if any of the students are blocked at the given time slot"""
+    for student_name in student_names:
+        if student_name not in student_schedules:
+            continue
+        
+        schedule = student_schedules[student_name]
+        for blocked_time in schedule.blocked_times:
+            if blocked_time.day.lower() == day.lower():
+                blocked_start = time_to_minutes(blocked_time.start)
+                blocked_end = time_to_minutes(blocked_time.end)
+                
+                # Check if time slot overlaps with blocked time
+                if not (slot_end_mins <= blocked_start or slot_start_mins >= blocked_end):
+                    return True  # At least one student is blocked
+    
+    return False  # No students are blocked
+
+
 def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
     """
     Generate a schedule based on constraints.
@@ -263,20 +317,69 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                             overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
                             
                             if not overlaps_lunch:
-                                # Create session
-                                schedule.append(TimeSlot(
-                                    day=day,
-                                    start=minutes_to_time(slot_start_mins),
-                                    end=minutes_to_time(slot_end_mins),
-                                    student=student_name,
-                                    subject=subject.name,
-                                    type="session"
-                                ))
+                                # Try to find other students who need the same subject and can overlap
+                                potential_students = [student_name]
                                 
-                                # Update tracking
-                                scheduled_minutes_by_day[student_name][subject.name][day] = actual_minutes
-                                scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
-                                scheduled_weekly_sessions[student_name][subject.name] += 1
+                                # Find other students who need the same subject
+                                for other_config in request.student_configs:
+                                    if other_config.name == student_name:
+                                        continue
+                                    
+                                    # Check if this student needs the same subject
+                                    needs_same_subject = False
+                                    for other_subject in other_config.subjects:
+                                        if other_subject.name == subject.name:
+                                            # Check if they still need this subject today
+                                            if other_subject.constraint_type == "daily" and other_subject.daily_minutes:
+                                                scheduled_today = scheduled_minutes_by_day[other_config.name][subject.name].get(day, 0)
+                                                if scheduled_today < other_subject.daily_minutes:
+                                                    needs_same_subject = True
+                                                    break
+                                    
+                                    if needs_same_subject:
+                                        # Check if they can overlap and are not blocked
+                                        if (check_all_can_overlap(potential_students + [other_config.name], request.students) and
+                                            not are_students_blocked_at_time(
+                                                [other_config.name],
+                                                day,
+                                                slot_start_mins,
+                                                slot_end_mins,
+                                                request.students
+                                            )):
+                                            potential_students.append(other_config.name)
+                                
+                                # Create session with all students who can overlap
+                                if len(potential_students) > 1:
+                                    # Multi-student session
+                                    schedule.append(TimeSlot(
+                                        day=day,
+                                        start=minutes_to_time(slot_start_mins),
+                                        end=minutes_to_time(slot_end_mins),
+                                        students=potential_students,
+                                        subject=subject.name,
+                                        type="session"
+                                    ))
+                                    
+                                    # Update tracking for all students
+                                    for student in potential_students:
+                                        scheduled_minutes_by_day[student][subject.name][day] = actual_minutes
+                                        scheduled_weekly_minutes[student][subject.name] += actual_minutes
+                                        scheduled_weekly_sessions[student][subject.name] += 1
+                                else:
+                                    # Single-student session
+                                    schedule.append(TimeSlot(
+                                        day=day,
+                                        start=minutes_to_time(slot_start_mins),
+                                        end=minutes_to_time(slot_end_mins),
+                                        student=student_name,
+                                        subject=subject.name,
+                                        type="session"
+                                    ))
+                                    
+                                    # Update tracking
+                                    scheduled_minutes_by_day[student_name][subject.name][day] = actual_minutes
+                                    scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
+                                    scheduled_weekly_sessions[student_name][subject.name] += 1
                                 
                                 # Remove used slots
                                 available_slots = available_slots[i + slots_needed:]
@@ -321,23 +424,77 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                             overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
                             
                             if not overlaps_lunch:
-                                # Create session
-                                schedule.append(TimeSlot(
-                                    day=day,
-                                    start=minutes_to_time(slot_start_mins),
-                                    end=minutes_to_time(slot_end_mins),
-                                    student=student_name,
-                                    subject=subject.name,
-                                    type="session"
-                                ))
+                                # Try to find other students who need the same subject and can overlap
+                                potential_students = [student_name]
                                 
-                                # Update tracking
-                                if day not in scheduled_minutes_by_day[student_name][subject.name]:
-                                    scheduled_minutes_by_day[student_name][subject.name][day] = 0
-                                scheduled_minutes_by_day[student_name][subject.name][day] += actual_minutes
-                                scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
-                                scheduled_weekly_sessions[student_name][subject.name] += 1
-                                sessions_to_schedule -= 1
+                                # Find other students who need the same subject
+                                for other_config in request.student_configs:
+                                    if other_config.name == student_name:
+                                        continue
+                                    
+                                    # Check if this student needs the same subject
+                                    needs_same_subject = False
+                                    for other_subject in other_config.subjects:
+                                        if other_subject.name == subject.name:
+                                            # Check if they still need this subject (weekly constraint)
+                                            if other_subject.constraint_type == "weekly":
+                                                other_sessions = scheduled_weekly_sessions[other_config.name][subject.name]
+                                                if other_sessions < other_subject.weekly_days:
+                                                    needs_same_subject = True
+                                                    break
+                                    
+                                    if needs_same_subject:
+                                        # Check if they can overlap and are not blocked
+                                        if (check_all_can_overlap(potential_students + [other_config.name], request.students) and
+                                            not are_students_blocked_at_time(
+                                                [other_config.name],
+                                                day,
+                                                slot_start_mins,
+                                                slot_end_mins,
+                                                request.students
+                                            )):
+                                            potential_students.append(other_config.name)
+                                
+                                # Create session with all students who can overlap
+                                if len(potential_students) > 1:
+                                    # Multi-student session
+                                    schedule.append(TimeSlot(
+                                        day=day,
+                                        start=minutes_to_time(slot_start_mins),
+                                        end=minutes_to_time(slot_end_mins),
+                                        students=potential_students,
+                                        subject=subject.name,
+                                        type="session"
+                                    ))
+                                    
+                                    # Update tracking for all students
+                                    for student in potential_students:
+                                        if day not in scheduled_minutes_by_day[student][subject.name]:
+                                            scheduled_minutes_by_day[student][subject.name][day] = 0
+                                        scheduled_minutes_by_day[student][subject.name][day] += actual_minutes
+                                        scheduled_weekly_minutes[student][subject.name] += actual_minutes
+                                        scheduled_weekly_sessions[student][subject.name] += 1
+                                    
+                                    # Count how many sessions we scheduled (one per student)
+                                    sessions_to_schedule -= 1
+                                else:
+                                    # Single-student session
+                                    schedule.append(TimeSlot(
+                                        day=day,
+                                        start=minutes_to_time(slot_start_mins),
+                                        end=minutes_to_time(slot_end_mins),
+                                        student=student_name,
+                                        subject=subject.name,
+                                        type="session"
+                                    ))
+                                    
+                                    # Update tracking
+                                    if day not in scheduled_minutes_by_day[student_name][subject.name]:
+                                        scheduled_minutes_by_day[student_name][subject.name][day] = 0
+                                    scheduled_minutes_by_day[student_name][subject.name][day] += actual_minutes
+                                    scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
+                                    scheduled_weekly_sessions[student_name][subject.name] += 1
+                                    sessions_to_schedule -= 1
                                 
                                 # Remove used slots
                                 available_slots = available_slots[i + slots_needed:]

@@ -1280,6 +1280,57 @@ body {
   background: white;
 }
 
+.overlap-config-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.overlap-config-section h4 {
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.section-hint {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0.75rem;
+  font-style: italic;
+}
+
+.overlap-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.overlap-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f0f0f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.overlap-checkbox-label:hover {
+  background: #e0e0e0;
+}
+
+.overlap-checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+}
+
+.overlap-checkbox-label span {
+  user-select: none;
+}
+
 .blocked-time-form-section {
   margin-bottom: 1.5rem;
   padding: 1rem;

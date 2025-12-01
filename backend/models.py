@@ -12,6 +12,7 @@ class BlockedTime(BaseModel):
 
 class StudentSchedule(BaseModel):
     blocked_times: List[BlockedTime]
+    can_overlap: Optional[List[str]] = []  # List of student names this student can be scheduled with
 
 
 class SubjectConfig(BaseModel):
@@ -45,7 +46,8 @@ class TimeSlot(BaseModel):
     day: str
     start: str
     end: str
-    student: Optional[str] = None
+    student: Optional[str] = None  # For backward compatibility (single student)
+    students: Optional[List[str]] = None  # For multi-student sessions
     subject: Optional[str] = None
     type: str  # "session", "lunch", "prep", "blocked"
     label: Optional[str] = None  # Optional label for blocked times

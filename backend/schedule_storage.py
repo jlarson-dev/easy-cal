@@ -137,14 +137,17 @@ def load_student_schedule(directory: str, student_name: str) -> Optional[Student
         # Handle both old format (with student name key) and new format (direct blocked_times)
         if isinstance(data, dict) and "blocked_times" in data:
             blocked_times = [BlockedTime(**bt) for bt in data.get("blocked_times", [])]
+            can_overlap = data.get("can_overlap", [])
         elif isinstance(data, dict) and student_name in data:
             # Old format: {"student_name": {"blocked_times": [...]}}
             schedule_data = data[student_name]
             blocked_times = [BlockedTime(**bt) for bt in schedule_data.get("blocked_times", [])]
+            can_overlap = schedule_data.get("can_overlap", [])
         else:
             blocked_times = []
+            can_overlap = []
         
-        return StudentSchedule(blocked_times=blocked_times)
+        return StudentSchedule(blocked_times=blocked_times, can_overlap=can_overlap or [])
     except (json.JSONDecodeError, IOError, KeyError) as e:
         return None
 
@@ -184,7 +187,8 @@ def save_student_schedule(directory: str, student_name: str, schedule: StudentSc
                     "label": bt.label if bt.label else None
                 }
                 for bt in schedule.blocked_times
-            ]
+            ],
+            "can_overlap": schedule.can_overlap or []
         }
         
         # Write to file atomically (write to temp file, then rename)
@@ -264,7 +268,8 @@ def log_deletion(directory: str, student_name: str, schedule: StudentSchedule):
                     "label": bt.label if bt.label else None
                 }
                 for bt in schedule.blocked_times
-            ]
+            ],
+            "can_overlap": schedule.can_overlap or []
         }
     }
     
@@ -302,7 +307,8 @@ def restore_student_schedule(directory: str, student_name: str) -> Tuple[bool, s
     
     # Create StudentSchedule from logged data
     blocked_times = [BlockedTime(**bt) for bt in schedule_data.get("blocked_times", [])]
-    schedule = StudentSchedule(blocked_times=blocked_times)
+    can_overlap = schedule_data.get("can_overlap", [])
+    schedule = StudentSchedule(blocked_times=blocked_times, can_overlap=can_overlap or [])
     
     # Save the schedule
     success, message = save_student_schedule(directory, student_name, schedule)

@@ -3,6 +3,7 @@ import { saveStudentSchedule, deleteStudentSchedule } from '../services/api';
 
 const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
   const [studentSchedules, setStudentSchedules] = useState({});
+  const [studentOverlaps, setStudentOverlaps] = useState({}); // { studentName: [list of student names they can overlap with] }
   const [expandedStudents, setExpandedStudents] = useState({});
   const [editingIndex, setEditingIndex] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
@@ -97,9 +98,11 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       const schedules = {};
       
       // Add students from the students prop (uploaded/managed)
+      const overlaps = {};
       if (students) {
         Object.keys(students).forEach(studentName => {
           schedules[studentName] = students[studentName].blocked_times || [];
+          overlaps[studentName] = students[studentName].can_overlap || [];
         });
       }
       
@@ -108,15 +111,19 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
         if (!schedules[studentName]) {
           schedules[studentName] = [];
         }
+        if (!overlaps[studentName]) {
+          overlaps[studentName] = [];
+        }
       });
       
       setStudentSchedules(schedules);
+      setStudentOverlaps(overlaps);
       prevStudentsRef.current = currentKey;
     }
   }, [students, studentNames]);
 
   // Save schedule to file when it changes (debounced)
-  const saveScheduleToFile = useCallback(async (studentName, schedule) => {
+  const saveScheduleToFile = useCallback(async (studentName, schedule, overlaps = null) => {
     // Always save to uploads directory (no directory selection needed)
 
     // Clear existing timeout for this student
@@ -130,13 +137,19 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     // Debounce: wait 1 second before saving
     saveTimeoutRef.current[studentName] = setTimeout(async () => {
       try {
+        // Use provided overlaps or get from state
+        const currentOverlaps = overlaps !== null 
+          ? overlaps 
+          : studentOverlaps[studentName] || [];
+        
         const scheduleData = {
           blocked_times: schedule.map(bt => ({
             day: bt.day,
             start: bt.start,
             end: bt.end,
             label: bt.label || null
-          }))
+          })),
+          can_overlap: currentOverlaps
         };
 
         await saveStudentSchedule(studentName, scheduleData);
@@ -155,7 +168,7 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
         setSaveStatus(prev => ({ ...prev, [studentName]: 'error' }));
       }
     }, 1000);
-  }, []);
+  }, [studentOverlaps]);
 
   // Notify parent when schedules change due to user actions
   useEffect(() => {
@@ -171,7 +184,7 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       // Save to file for each student that changed
       Object.keys(studentSchedules).forEach(studentName => {
         const schedule = studentSchedules[studentName];
-        if (schedule && schedule.length > 0) {
+        if (schedule) {
           saveScheduleToFile(studentName, schedule);
         }
       });
@@ -179,6 +192,24 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       isUserAction.current = false;
     }
   }, [studentSchedules, onUpdate, saveScheduleToFile]);
+  
+  // Save when overlaps change
+  useEffect(() => {
+    if (isInitialMount.current) {
+      return;
+    }
+    
+    if (isUserAction.current) {
+      // Save all students whose overlaps changed
+      Object.keys(studentOverlaps).forEach(studentName => {
+        const schedule = studentSchedules[studentName];
+        if (schedule) {
+          saveScheduleToFile(studentName, schedule, studentOverlaps[studentName]);
+        }
+      });
+      isUserAction.current = false;
+    }
+  }, [studentOverlaps, studentSchedules, saveScheduleToFile]);
 
   const toggleStudent = (studentName) => {
     setExpandedStudents({
@@ -421,6 +452,50 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
 
             {isExpanded && (
               <div className="student-schedule-content">
+                {/* Overlap Configuration */}
+                <div className="overlap-config-section">
+                  <h4>Can Be Scheduled Together With</h4>
+                  <p className="section-hint">Select which students can be scheduled at the same time. When you check a student here, they will automatically be able to schedule with {studentName} as well (bidirectional).</p>
+                  <div className="overlap-checkboxes">
+                    {allStudentNames
+                      .filter(name => name !== studentName)
+                      .map(otherStudent => (
+                        <label key={otherStudent} className="overlap-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={(studentOverlaps[studentName] || []).includes(otherStudent)}
+                            onChange={(e) => {
+                              isUserAction.current = true;
+                              setStudentOverlaps(prev => {
+                                const current = prev[studentName] || [];
+                                const otherCurrent = prev[otherStudent] || [];
+                                
+                                // Update both students' overlap lists (bidirectional)
+                                const updated = e.target.checked
+                                  ? [...current, otherStudent]
+                                  : current.filter(name => name !== otherStudent);
+                                
+                                const otherUpdated = e.target.checked
+                                  ? [...otherCurrent, studentName]
+                                  : otherCurrent.filter(name => name !== studentName);
+                                
+                                return {
+                                  ...prev,
+                                  [studentName]: updated,
+                                  [otherStudent]: otherUpdated
+                                };
+                              });
+                            }}
+                          />
+                          <span>{otherStudent}</span>
+                        </label>
+                      ))}
+                    {allStudentNames.filter(name => name !== studentName).length === 0 && (
+                      <p className="empty-message">No other students available</p>
+                    )}
+                  </div>
+                </div>
+
                 {/* Add/Edit Form */}
                 <div className="blocked-time-form-section">
                   <h4>{isEditing ? 'Edit' : 'Add'} Blocked Time</h4>

@@ -6,6 +6,7 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadedData, setUploadedData] = useState(null);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -13,6 +14,7 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
       if (selectedFile.type === 'application/json' || selectedFile.name.endsWith('.json')) {
         setFile(selectedFile);
         setError(null);
+        setDuplicateWarning(null);
       } else {
         setError('Please upload a JSON file');
         setFile(null);
@@ -20,7 +22,7 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
     }
   };
 
-  const handleUpload = async () => {
+  const handleUpload = async (overwrite = false) => {
     if (!file) {
       setError('Please select a file');
       return;
@@ -28,18 +30,42 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
 
     setUploading(true);
     setError(null);
+    setDuplicateWarning(null);
 
     try {
-      const result = await uploadSchedule(file);
-      setUploadedData(result);
-      if (onUploadSuccess) {
-        onUploadSuccess(result.students);
+      const result = await uploadSchedule(file, overwrite);
+      
+      // Check if there are existing students that weren't overwritten
+      if (result.existing_students && result.existing_students.length > 0) {
+        setDuplicateWarning({
+          existing: result.existing_students,
+          saved: result.saved_students || []
+        });
+        setUploadedData(null);
+      } else {
+        setUploadedData(result);
+        setDuplicateWarning(null);
+        if (onUploadSuccess) {
+          onUploadSuccess(result.students);
+        }
       }
     } catch (err) {
-      setError(err.message || 'Failed to upload schedule');
+      const errorMessage = err.message || err.toString() || 'Failed to upload schedule';
+      setError(errorMessage);
+      console.error('Upload error:', err);
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleOverwrite = () => {
+    handleUpload(true);
+  };
+
+  const handleSkip = () => {
+    // Just clear the warning, don't upload
+    setDuplicateWarning(null);
+    setFile(null);
   };
 
   return (
@@ -58,6 +84,31 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
       </div>
       
       {error && <div className="error">{error}</div>}
+      
+      {duplicateWarning && (
+        <div className="duplicate-warning">
+          <p><strong>⚠️ Duplicate schedules detected</strong></p>
+          <p>The following students already have schedules:</p>
+          <ul>
+            {duplicateWarning.existing.map(name => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+          {duplicateWarning.saved.length > 0 && (
+            <p className="saved-info">
+              ✓ Uploaded {duplicateWarning.saved.length} new student schedule(s): {duplicateWarning.saved.join(', ')}
+            </p>
+          )}
+          <div className="duplicate-actions">
+            <button onClick={handleOverwrite} className="overwrite-button">
+              Overwrite Existing
+            </button>
+            <button onClick={handleSkip} className="skip-button">
+              Skip Duplicates
+            </button>
+          </div>
+        </div>
+      )}
       
       {uploadedData && (
         <div className="success">

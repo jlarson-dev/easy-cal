@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { saveStudentSchedule, deleteStudentSchedule } from '../services/api';
 
 const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
   const [studentSchedules, setStudentSchedules] = useState({});
@@ -12,9 +13,12 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     label: '',
     isDaily: false
   });
+  const [saveStatus, setSaveStatus] = useState({}); // { studentName: 'saving' | 'saved' | 'error' }
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { studentName: string } or null
   const isInitialMount = useRef(true);
   const prevStudentsRef = useRef(null);
   const isUserAction = useRef(false);
+  const saveTimeoutRef = useRef({}); // Debounce saves per student
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -111,6 +115,48 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     }
   }, [students, studentNames]);
 
+  // Save schedule to file when it changes (debounced)
+  const saveScheduleToFile = useCallback(async (studentName, schedule) => {
+    // Always save to uploads directory (no directory selection needed)
+
+    // Clear existing timeout for this student
+    if (saveTimeoutRef.current[studentName]) {
+      clearTimeout(saveTimeoutRef.current[studentName]);
+    }
+
+    // Set saving status
+    setSaveStatus(prev => ({ ...prev, [studentName]: 'saving' }));
+
+    // Debounce: wait 1 second before saving
+    saveTimeoutRef.current[studentName] = setTimeout(async () => {
+      try {
+        const scheduleData = {
+          blocked_times: schedule.map(bt => ({
+            day: bt.day,
+            start: bt.start,
+            end: bt.end,
+            label: bt.label || null
+          }))
+        };
+
+        await saveStudentSchedule(studentName, scheduleData);
+        setSaveStatus(prev => ({ ...prev, [studentName]: 'saved' }));
+        
+        // Clear saved status after 2 seconds
+        setTimeout(() => {
+          setSaveStatus(prev => {
+            const updated = { ...prev };
+            delete updated[studentName];
+            return updated;
+          });
+        }, 2000);
+      } catch (err) {
+        console.error(`Failed to save schedule for ${studentName}:`, err);
+        setSaveStatus(prev => ({ ...prev, [studentName]: 'error' }));
+      }
+    }, 1000);
+  }, []);
+
   // Notify parent when schedules change due to user actions
   useEffect(() => {
     if (isInitialMount.current) {
@@ -121,9 +167,18 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     // Only notify if this was a user action
     if (isUserAction.current && onUpdate) {
       onUpdate(studentSchedules);
+      
+      // Save to file for each student that changed
+      Object.keys(studentSchedules).forEach(studentName => {
+        const schedule = studentSchedules[studentName];
+        if (schedule && schedule.length > 0) {
+          saveScheduleToFile(studentName, schedule);
+        }
+      });
+      
       isUserAction.current = false;
     }
-  }, [studentSchedules, onUpdate]);
+  }, [studentSchedules, onUpdate, saveScheduleToFile]);
 
   const toggleStudent = (studentName) => {
     setExpandedStudents({
@@ -260,6 +315,29 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     });
   };
 
+  const handleDeleteStudent = async (studentName) => {
+    try {
+      await deleteStudentSchedule(studentName);
+      // Remove from local state
+      isUserAction.current = true;
+      setStudentSchedules(prevSchedules => {
+        const updated = { ...prevSchedules };
+        delete updated[studentName];
+        return updated;
+      });
+      setDeleteConfirm(null);
+      // Notify parent
+      if (onUpdate) {
+        const updated = { ...studentSchedules };
+        delete updated[studentName];
+        onUpdate(updated);
+      }
+    } catch (err) {
+      console.error(`Failed to delete student ${studentName}:`, err);
+      alert(`Failed to delete student: ${err.message}`);
+    }
+  };
+
   const handleAddLabel = (studentName, index) => {
     setStudentSchedules(prevSchedules => {
       const blockedTime = prevSchedules[studentName]?.[index];
@@ -314,12 +392,31 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
 
         return (
           <div key={studentName} className="student-schedule-card">
-            <div className="student-schedule-header" onClick={() => toggleStudent(studentName)}>
-              <h3>{studentName}</h3>
-              <div className="student-schedule-stats">
-                <span>{blockedTimes.length} blocked time{blockedTimes.length !== 1 ? 's' : ''}</span>
-                <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+            <div className="student-schedule-header">
+              <div onClick={() => toggleStudent(studentName)} style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3>{studentName}</h3>
+                <div className="student-schedule-stats">
+                  <span>{blockedTimes.length} blocked time{blockedTimes.length !== 1 ? 's' : ''}</span>
+                  {saveStatus[studentName] && (
+                    <span className={`save-status ${saveStatus[studentName]}`}>
+                      {saveStatus[studentName] === 'saving' && '💾 Saving...'}
+                      {saveStatus[studentName] === 'saved' && '✓ Saved'}
+                      {saveStatus[studentName] === 'error' && '✗ Error'}
+                    </span>
+                  )}
+                  <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+                </div>
               </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteConfirm({ studentName });
+                }}
+                className="delete-student-button"
+                title="Delete student"
+              >
+                🗑️
+              </button>
             </div>
 
             {isExpanded && (
@@ -467,6 +564,31 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
           </div>
         );
       })}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal-content delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to delete <strong>{deleteConfirm.studentName}</strong>?</p>
+            <p className="warning-text">This action cannot be undone, but you can restore from the deletion log.</p>
+            <div className="modal-actions">
+              <button
+                onClick={() => handleDeleteStudent(deleteConfirm.studentName)}
+                className="confirm-delete-button"
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="cancel-button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

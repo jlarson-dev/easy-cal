@@ -1,14 +1,16 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import StudentScheduleUpload from './components/StudentScheduleUpload';
 import StudentSchedulesView from './components/StudentSchedulesView';
+import DeletedStudentsView from './components/DeletedStudentsView';
 import SubjectConfiguration from './components/SubjectConfiguration';
 import ScheduleDisplay from './components/ScheduleDisplay';
-import { generateSchedule } from './services/api';
+import { generateSchedule, loadSchedules, reloadSchedules } from './services/api';
 import './styles/App.css';
 
 function App() {
   const [uploadedStudents, setUploadedStudents] = useState({});
   const [managedSchedules, setManagedSchedules] = useState({}); // Manually managed schedules
+  const [persistedSchedules, setPersistedSchedules] = useState({}); // Schedules loaded from files
   const [config, setConfig] = useState(null);
   const [schedule, setSchedule] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -16,12 +18,11 @@ function App() {
 
   const handleUploadSuccess = (students) => {
     setUploadedStudents(students);
-    // Also update managed schedules to include uploaded students
+    // Also update persisted and managed schedules
+    setPersistedSchedules(students);
     const merged = { ...managedSchedules };
     Object.keys(students).forEach(studentName => {
-      if (!merged[studentName]) {
-        merged[studentName] = students[studentName].blocked_times || [];
-      }
+      merged[studentName] = students[studentName].blocked_times || [];
     });
     setManagedSchedules(merged);
   };
@@ -30,11 +31,51 @@ function App() {
     setManagedSchedules(updatedSchedules);
   }, []);
 
+  // Auto-load schedules on startup
+  useEffect(() => {
+    const initializeSchedules = async () => {
+      try {
+        // Load schedules from uploads directory
+        const loadResult = await loadSchedules();
+        if (loadResult.students) {
+          setPersistedSchedules(loadResult.students);
+          // Also merge into managed schedules
+          setManagedSchedules(prev => {
+            const merged = { ...prev };
+            Object.keys(loadResult.students).forEach(studentName => {
+              merged[studentName] = loadResult.students[studentName].blocked_times || [];
+            });
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to initialize schedules:', err);
+        // Don't show error to user on startup, just log it
+      }
+    };
+
+    initializeSchedules();
+  }, []);
+
+  const handleSchedulesReloaded = useCallback((students, changes) => {
+    if (students) {
+      setPersistedSchedules(students);
+      // Merge into managed schedules
+      setManagedSchedules(prev => {
+        const merged = { ...prev };
+        Object.keys(students).forEach(studentName => {
+          merged[studentName] = students[studentName].blocked_times || [];
+        });
+        return merged;
+      });
+    }
+  }, []);
+
   const handleConfigChange = (newConfig) => {
     setConfig(newConfig);
   };
 
-  // Merge uploaded and manually managed schedules (memoized to prevent unnecessary re-renders)
+  // Merge uploaded, persisted, and manually managed schedules (memoized to prevent unnecessary re-renders)
   const studentSchedulesData = useMemo(() => {
     const merged = {};
     
@@ -155,14 +196,51 @@ function App() {
 
       <main className="app-main">
         <div className="app-content">
-          <section className="input-section">
-            <StudentScheduleUpload onUploadSuccess={handleUploadSuccess} />
-            
-            <StudentSchedulesView
-              students={studentSchedulesData}
-              studentNames={allStudentNames}
-              onUpdate={handleSchedulesUpdate}
-            />
+              <section className="input-section">
+                <StudentScheduleUpload onUploadSuccess={handleUploadSuccess} />
+                
+                <div className="reload-section">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const result = await reloadSchedules();
+                        handleSchedulesReloaded(result.students, result.changes);
+                      } catch (err) {
+                        console.error('Failed to reload schedules:', err);
+                      }
+                    }}
+                    className="reload-button"
+                  >
+                    Reload Schedules
+                  </button>
+                </div>
+                
+                <StudentSchedulesView
+                  students={studentSchedulesData}
+                  studentNames={allStudentNames}
+                  onUpdate={handleSchedulesUpdate}
+                />
+
+                <DeletedStudentsView
+                  onRestore={async () => {
+                    // Reload schedules after restoration
+                    try {
+                      const loadResult = await loadSchedules();
+                      if (loadResult.students) {
+                        setPersistedSchedules(loadResult.students);
+                        setManagedSchedules(prev => {
+                          const merged = { ...prev };
+                          Object.keys(loadResult.students).forEach(studentName => {
+                            merged[studentName] = loadResult.students[studentName].blocked_times || [];
+                          });
+                          return merged;
+                        });
+                      }
+                    } catch (err) {
+                      console.error('Failed to reload schedules:', err);
+                    }
+                  }}
+                />
             
             <SubjectConfiguration
               onConfigChange={handleConfigChange}

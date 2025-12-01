@@ -82,19 +82,29 @@ function App() {
     // Add uploaded students
     Object.keys(uploadedStudents).forEach(studentName => {
       merged[studentName] = {
-        blocked_times: uploadedStudents[studentName].blocked_times || []
+        blocked_times: uploadedStudents[studentName].blocked_times || [],
+        can_overlap: uploadedStudents[studentName].can_overlap || []
       };
     });
     
-    // Add/update with managed schedules (managed takes precedence)
+    // Add/update with persisted schedules (includes can_overlap)
+    Object.keys(persistedSchedules).forEach(studentName => {
+      merged[studentName] = {
+        blocked_times: persistedSchedules[studentName].blocked_times || [],
+        can_overlap: persistedSchedules[studentName].can_overlap || []
+      };
+    });
+    
+    // Add/update with managed schedules (managed takes precedence for blocked_times, but preserve can_overlap)
     Object.keys(managedSchedules).forEach(studentName => {
       merged[studentName] = {
-        blocked_times: managedSchedules[studentName]
+        blocked_times: managedSchedules[studentName],
+        can_overlap: merged[studentName]?.can_overlap || []
       };
     });
     
     return merged;
-  }, [uploadedStudents, managedSchedules]);
+  }, [uploadedStudents, persistedSchedules, managedSchedules]);
 
   // Get all student names from both uploaded and config (memoized)
   const allStudentNames = useMemo(() => {

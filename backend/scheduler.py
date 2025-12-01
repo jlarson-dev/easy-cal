@@ -285,221 +285,269 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
     )
     
     # Schedule subjects: prioritize daily constraints first, then weekly
-    for student_config in student_priority:
-        student_name = student_config.name
+    # Strategy: For each subject/day combination, try to find the largest possible group first
+    
+    # First pass: Schedule daily constraints - prioritize multi-student groups
+    for day in request.working_hours.days:
+        if day not in available_by_day:
+            continue
         
-        # First pass: Schedule daily constraints (highest priority)
-        for subject in student_config.subjects:
-            if subject.constraint_type == "daily" and subject.daily_minutes:
-                # Schedule daily_minutes on every working day
-                for day in request.working_hours.days:
-                    if day not in available_by_day:
+        # Group students by subject for this day
+        subject_groups: Dict[str, List[str]] = {}  # subject_name -> [list of student names needing it]
+        
+        for student_config in request.student_configs:
+            student_name = student_config.name
+            for subject in student_config.subjects:
+                if subject.constraint_type == "daily" and subject.daily_minutes:
+                    scheduled_today = scheduled_minutes_by_day[student_name][subject.name].get(day, 0)
+                    if scheduled_today < subject.daily_minutes:
+                        if subject.name not in subject_groups:
+                            subject_groups[subject.name] = []
+                        subject_groups[subject.name].append(student_name)
+        
+        # For each subject, try to schedule groups (prioritize largest groups)
+        for subject_name, students_needing in subject_groups.items():
+            if not students_needing:
+                continue
+            
+            # Continue scheduling until all students needing this subject are scheduled
+            while True:
+                # Filter to students who still need this subject today
+                remaining_students = []
+                for student_name in students_needing:
+                    scheduled_today = scheduled_minutes_by_day[student_name][subject_name].get(day, 0)
+                    student_needs = next((subj.daily_minutes for subj in student_config_dict[student_name].subjects 
+                                         if subj.name == subject_name and subj.constraint_type == "daily"), 0)
+                    if scheduled_today < student_needs:
+                        remaining_students.append(student_name)
+                
+                if not remaining_students:
+                    break  # All students for this subject are scheduled
+                
+                # Find max minutes needed for remaining students
+                max_minutes = 0
+                for student_name in remaining_students:
+                    for subj in student_config_dict[student_name].subjects:
+                        if subj.name == subject_name and subj.constraint_type == "daily":
+                            max_minutes = max(max_minutes, subj.daily_minutes)
+                            break
+                
+                available_slots = available_by_day[day]
+                if not available_slots:
+                    break  # No more available slots
+                
+                slots_needed = int((max_minutes + slot_duration - 1) / slot_duration)
+                if slots_needed == 0:
+                    slots_needed = 1
+                
+                # Try all time slots to find the best group (prioritize larger groups)
+                best_group = None
+                best_slot_index = None
+                best_slot_info = None
+                
+                for i in range(len(available_slots) - slots_needed + 1):
+                    consecutive_slots = available_slots[i:i + slots_needed]
+                    slot_start_mins = consecutive_slots[0][0]
+                    slot_end_mins = consecutive_slots[-1][1]
+                    actual_minutes = slot_end_mins - slot_start_mins
+                    
+                    if actual_minutes < max_minutes:
                         continue
                     
-                    available_slots = available_by_day[day]
-                    minutes_needed = subject.daily_minutes
-                    slots_needed = int((minutes_needed + slot_duration - 1) / slot_duration)  # Ceiling division
-                    if slots_needed == 0:
-                        slots_needed = 1
-                    
-                    # Find consecutive available slots
-                    for i in range(len(available_slots) - slots_needed + 1):
-                        consecutive_slots = available_slots[i:i + slots_needed]
-                        slot_start_mins = consecutive_slots[0][0]
-                        slot_end_mins = consecutive_slots[-1][1]
-                        actual_minutes = slot_end_mins - slot_start_mins
-                        
-                        # Check if we have enough time
-                        if actual_minutes >= minutes_needed:
-                            # Double-check: ensure no overlap with lunch
-                            lunch_start_mins = lunch_mins
-                            lunch_end_mins = lunch_mins + 60
-                            overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
-                            
-                            if not overlaps_lunch:
-                                # Try to find other students who need the same subject and can overlap
-                                potential_students = [student_name]
-                                
-                                # Find other students who need the same subject
-                                for other_config in request.student_configs:
-                                    if other_config.name == student_name:
-                                        continue
-                                    
-                                    # Check if this student needs the same subject
-                                    needs_same_subject = False
-                                    for other_subject in other_config.subjects:
-                                        if other_subject.name == subject.name:
-                                            # Check if they still need this subject today
-                                            if other_subject.constraint_type == "daily" and other_subject.daily_minutes:
-                                                scheduled_today = scheduled_minutes_by_day[other_config.name][subject.name].get(day, 0)
-                                                if scheduled_today < other_subject.daily_minutes:
-                                                    needs_same_subject = True
-                                                    break
-                                    
-                                    if needs_same_subject:
-                                        # Check if they can overlap and are not blocked
-                                        if (check_all_can_overlap(potential_students + [other_config.name], request.students) and
-                                            not are_students_blocked_at_time(
-                                                [other_config.name],
-                                                day,
-                                                slot_start_mins,
-                                                slot_end_mins,
-                                                request.students
-                                            )):
-                                            potential_students.append(other_config.name)
-                                
-                                # Create session with all students who can overlap
-                                if len(potential_students) > 1:
-                                    # Multi-student session
-                                    schedule.append(TimeSlot(
-                                        day=day,
-                                        start=minutes_to_time(slot_start_mins),
-                                        end=minutes_to_time(slot_end_mins),
-                                        students=potential_students,
-                                        subject=subject.name,
-                                        type="session"
-                                    ))
-                                    
-                                    # Update tracking for all students
-                                    for student in potential_students:
-                                        scheduled_minutes_by_day[student][subject.name][day] = actual_minutes
-                                        scheduled_weekly_minutes[student][subject.name] += actual_minutes
-                                        scheduled_weekly_sessions[student][subject.name] += 1
-                                else:
-                                    # Single-student session
-                                    schedule.append(TimeSlot(
-                                        day=day,
-                                        start=minutes_to_time(slot_start_mins),
-                                        end=minutes_to_time(slot_end_mins),
-                                        student=student_name,
-                                        subject=subject.name,
-                                        type="session"
-                                    ))
-                                    
-                                    # Update tracking
-                                    scheduled_minutes_by_day[student_name][subject.name][day] = actual_minutes
-                                    scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
-                                    scheduled_weekly_sessions[student_name][subject.name] += 1
-                                
-                                # Remove used slots
-                                available_slots = available_slots[i + slots_needed:]
-                                available_by_day[day] = available_slots
-                                break
-        
-        # Second pass: Schedule weekly constraints
-        for subject in student_config.subjects:
-            if subject.constraint_type == "weekly":
-                if not subject.weekly_days or not subject.weekly_minutes_per_session:
-                    continue
-                
-                minutes_per_session = subject.weekly_minutes_per_session
-                current_sessions = scheduled_weekly_sessions[student_name][subject.name]
-                sessions_needed = subject.weekly_days
-                
-                # Try to schedule remaining sessions across days
-                sessions_to_schedule = sessions_needed - current_sessions
-                for day in request.working_hours.days:
-                    if sessions_to_schedule <= 0:
-                        break
-                    
-                    if day not in available_by_day:
+                    # Check lunch overlap
+                    lunch_start_mins = lunch_mins
+                    lunch_end_mins = lunch_mins + 60
+                    overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
+                    if overlaps_lunch:
                         continue
                     
-                    available_slots = available_by_day[day]
-                    slots_needed = int((minutes_per_session + slot_duration - 1) / slot_duration)
-                    if slots_needed == 0:
-                        slots_needed = 1
-                    
-                    # Find consecutive available slots
-                    for i in range(len(available_slots) - slots_needed + 1):
-                        consecutive_slots = available_slots[i:i + slots_needed]
-                        slot_start_mins = consecutive_slots[0][0]
-                        slot_end_mins = consecutive_slots[-1][1]
-                        actual_minutes = slot_end_mins - slot_start_mins
+                    # Find the largest group of students who can be scheduled together at this time
+                    potential_group = []
+                    for student_name in remaining_students:
+                        # Check if student is blocked at this time
+                        if are_students_blocked_at_time([student_name], day, slot_start_mins, slot_end_mins, request.students):
+                            continue
                         
-                        if actual_minutes >= minutes_per_session:
-                            # Double-check: ensure no overlap with lunch
-                            lunch_start_mins = lunch_mins
-                            lunch_end_mins = lunch_mins + 60
-                            overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
-                            
-                            if not overlaps_lunch:
-                                # Try to find other students who need the same subject and can overlap
-                                potential_students = [student_name]
-                                
-                                # Find other students who need the same subject
-                                for other_config in request.student_configs:
-                                    if other_config.name == student_name:
-                                        continue
-                                    
-                                    # Check if this student needs the same subject
-                                    needs_same_subject = False
-                                    for other_subject in other_config.subjects:
-                                        if other_subject.name == subject.name:
-                                            # Check if they still need this subject (weekly constraint)
-                                            if other_subject.constraint_type == "weekly":
-                                                other_sessions = scheduled_weekly_sessions[other_config.name][subject.name]
-                                                if other_sessions < other_subject.weekly_days:
-                                                    needs_same_subject = True
-                                                    break
-                                    
-                                    if needs_same_subject:
-                                        # Check if they can overlap and are not blocked
-                                        if (check_all_can_overlap(potential_students + [other_config.name], request.students) and
-                                            not are_students_blocked_at_time(
-                                                [other_config.name],
-                                                day,
-                                                slot_start_mins,
-                                                slot_end_mins,
-                                                request.students
-                                            )):
-                                            potential_students.append(other_config.name)
-                                
-                                # Create session with all students who can overlap
-                                if len(potential_students) > 1:
-                                    # Multi-student session
-                                    schedule.append(TimeSlot(
-                                        day=day,
-                                        start=minutes_to_time(slot_start_mins),
-                                        end=minutes_to_time(slot_end_mins),
-                                        students=potential_students,
-                                        subject=subject.name,
-                                        type="session"
-                                    ))
-                                    
-                                    # Update tracking for all students
-                                    for student in potential_students:
-                                        if day not in scheduled_minutes_by_day[student][subject.name]:
-                                            scheduled_minutes_by_day[student][subject.name][day] = 0
-                                        scheduled_minutes_by_day[student][subject.name][day] += actual_minutes
-                                        scheduled_weekly_minutes[student][subject.name] += actual_minutes
-                                        scheduled_weekly_sessions[student][subject.name] += 1
-                                    
-                                    # Count how many sessions we scheduled (one per student)
-                                    sessions_to_schedule -= 1
-                                else:
-                                    # Single-student session
-                                    schedule.append(TimeSlot(
-                                        day=day,
-                                        start=minutes_to_time(slot_start_mins),
-                                        end=minutes_to_time(slot_end_mins),
-                                        student=student_name,
-                                        subject=subject.name,
-                                        type="session"
-                                    ))
-                                    
-                                    # Update tracking
-                                    if day not in scheduled_minutes_by_day[student_name][subject.name]:
-                                        scheduled_minutes_by_day[student_name][subject.name][day] = 0
-                                    scheduled_minutes_by_day[student_name][subject.name][day] += actual_minutes
-                                    scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
-                                    scheduled_weekly_sessions[student_name][subject.name] += 1
-                                    sessions_to_schedule -= 1
-                                
-                                # Remove used slots
-                                available_slots = available_slots[i + slots_needed:]
-                                available_by_day[day] = available_slots
-                                break
+                        # Check if this student can overlap with all students in the potential group
+                        if check_all_can_overlap(potential_group + [student_name], request.students):
+                            potential_group.append(student_name)
+                    
+                    # Keep track of the best group (largest group size)
+                    if potential_group and (best_group is None or len(potential_group) > len(best_group)):
+                        best_group = potential_group
+                        best_slot_index = i
+                        best_slot_info = (slot_start_mins, slot_end_mins, actual_minutes)
+                
+                # Schedule the best group found
+                if best_group and best_slot_info:
+                    slot_start_mins, slot_end_mins, actual_minutes = best_slot_info
+                    
+                    if len(best_group) > 1:
+                        # Multi-student session (prioritized)
+                        schedule.append(TimeSlot(
+                            day=day,
+                            start=minutes_to_time(slot_start_mins),
+                            end=minutes_to_time(slot_end_mins),
+                            students=best_group,
+                            subject=subject_name,
+                            type="session"
+                        ))
+                    else:
+                        # Single-student session (fallback)
+                        schedule.append(TimeSlot(
+                            day=day,
+                            start=minutes_to_time(slot_start_mins),
+                            end=minutes_to_time(slot_end_mins),
+                            student=best_group[0],
+                            subject=subject_name,
+                            type="session"
+                        ))
+                    
+                    # Update tracking for all students in the group
+                    for student in best_group:
+                        scheduled_minutes_by_day[student][subject_name][day] = actual_minutes
+                        scheduled_weekly_minutes[student][subject_name] += actual_minutes
+                        scheduled_weekly_sessions[student][subject_name] += 1
+                    
+                    # Remove used slots
+                    slots_used = int((actual_minutes + slot_duration - 1) / slot_duration)
+                    available_slots = available_slots[best_slot_index + slots_used:]
+                    available_by_day[day] = available_slots
+                else:
+                    # No valid slot found for remaining students, move to next subject
+                    break
+    
+    # Second pass: Schedule weekly constraints - prioritize multi-student groups
+    for day in request.working_hours.days:
+        if day not in available_by_day:
+            continue
+        
+        # Group students by subject for this day (weekly constraints)
+        subject_groups: Dict[str, List[str]] = {}  # subject_name -> [list of student names needing it]
+        
+        for student_config in request.student_configs:
+            student_name = student_config.name
+            for subject in student_config.subjects:
+                if subject.constraint_type == "weekly" and subject.weekly_days and subject.weekly_minutes_per_session:
+                    current_sessions = scheduled_weekly_sessions[student_name][subject.name]
+                    if current_sessions < subject.weekly_days:
+                        if subject.name not in subject_groups:
+                            subject_groups[subject.name] = []
+                        subject_groups[subject.name].append(student_name)
+        
+        # For each subject, try to schedule groups (prioritize largest groups)
+        for subject_name, students_needing in subject_groups.items():
+            if not students_needing:
+                continue
+            
+            # Continue scheduling until all students needing this subject are scheduled
+            while True:
+                # Filter to students who still need this subject (weekly constraint)
+                remaining_students = []
+                for student_name in students_needing:
+                    current_sessions = scheduled_weekly_sessions[student_name][subject_name]
+                    sessions_needed = next((subj.weekly_days for subj in student_config_dict[student_name].subjects 
+                                          if subj.name == subject_name and subj.constraint_type == "weekly"), 0)
+                    if current_sessions < sessions_needed:
+                        remaining_students.append(student_name)
+                
+                if not remaining_students:
+                    break  # All students for this subject are scheduled
+                
+                # Find max minutes per session for remaining students
+                max_minutes = 0
+                for student_name in remaining_students:
+                    for subj in student_config_dict[student_name].subjects:
+                        if subj.name == subject_name and subj.constraint_type == "weekly" and subj.weekly_minutes_per_session:
+                            max_minutes = max(max_minutes, subj.weekly_minutes_per_session)
+                            break
+                
+                available_slots = available_by_day[day]
+                if not available_slots:
+                    break  # No more available slots
+                
+                slots_needed = int((max_minutes + slot_duration - 1) / slot_duration)
+                if slots_needed == 0:
+                    slots_needed = 1
+                
+                # Try all time slots to find the best group (prioritize larger groups)
+                best_group = None
+                best_slot_index = None
+                best_slot_info = None
+                
+                for i in range(len(available_slots) - slots_needed + 1):
+                    consecutive_slots = available_slots[i:i + slots_needed]
+                    slot_start_mins = consecutive_slots[0][0]
+                    slot_end_mins = consecutive_slots[-1][1]
+                    actual_minutes = slot_end_mins - slot_start_mins
+                    
+                    if actual_minutes < max_minutes:
+                        continue
+                    
+                    # Check lunch overlap
+                    lunch_start_mins = lunch_mins
+                    lunch_end_mins = lunch_mins + 60
+                    overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
+                    if overlaps_lunch:
+                        continue
+                    
+                    # Find the largest group of students who can be scheduled together at this time
+                    potential_group = []
+                    for student_name in remaining_students:
+                        # Check if student is blocked at this time
+                        if are_students_blocked_at_time([student_name], day, slot_start_mins, slot_end_mins, request.students):
+                            continue
+                        
+                        # Check if this student can overlap with all students in the potential group
+                        if check_all_can_overlap(potential_group + [student_name], request.students):
+                            potential_group.append(student_name)
+                    
+                    # Keep track of the best group (largest group size)
+                    if potential_group and (best_group is None or len(potential_group) > len(best_group)):
+                        best_group = potential_group
+                        best_slot_index = i
+                        best_slot_info = (slot_start_mins, slot_end_mins, actual_minutes)
+                
+                # Schedule the best group found
+                if best_group and best_slot_info:
+                    slot_start_mins, slot_end_mins, actual_minutes = best_slot_info
+                    
+                    if len(best_group) > 1:
+                        # Multi-student session (prioritized)
+                        schedule.append(TimeSlot(
+                            day=day,
+                            start=minutes_to_time(slot_start_mins),
+                            end=minutes_to_time(slot_end_mins),
+                            students=best_group,
+                            subject=subject_name,
+                            type="session"
+                        ))
+                    else:
+                        # Single-student session (fallback)
+                        schedule.append(TimeSlot(
+                            day=day,
+                            start=minutes_to_time(slot_start_mins),
+                            end=minutes_to_time(slot_end_mins),
+                            student=best_group[0],
+                            subject=subject_name,
+                            type="session"
+                        ))
+                    
+                    # Update tracking for all students in the group
+                    for student in best_group:
+                        if day not in scheduled_minutes_by_day[student][subject_name]:
+                            scheduled_minutes_by_day[student][subject_name][day] = 0
+                        scheduled_minutes_by_day[student][subject_name][day] += actual_minutes
+                        scheduled_weekly_minutes[student][subject_name] += actual_minutes
+                        scheduled_weekly_sessions[student][subject_name] += 1
+                    
+                    # Remove used slots
+                    slots_used = int((actual_minutes + slot_duration - 1) / slot_duration)
+                    available_slots = available_slots[best_slot_index + slots_used:]
+                    available_by_day[day] = available_slots
+                else:
+                    # No valid slot found for remaining students, move to next subject
+                    break
     
     # Schedule flexible prep time (1 hour per day if required)
     if request.prep_time_required:

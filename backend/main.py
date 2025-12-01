@@ -233,7 +233,8 @@ async def reload_schedules_endpoint():
                         "label": bt.label if bt.label else None
                     }
                     for bt in schedule.blocked_times
-                ]
+                ],
+                "can_overlap": schedule.can_overlap or []
             }
             for name, schedule in result["schedules"].items()
         },
@@ -247,7 +248,8 @@ async def save_schedule(student_name: str, schedule_data: dict):
     # Convert dict to StudentSchedule model
     try:
         blocked_times = [BlockedTime(**bt) for bt in schedule_data.get("blocked_times", [])]
-        schedule = StudentSchedule(blocked_times=blocked_times)
+        can_overlap = schedule_data.get("can_overlap", [])
+        schedule = StudentSchedule(blocked_times=blocked_times, can_overlap=can_overlap or [])
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid schedule format: {str(e)}")
     

@@ -77,7 +77,8 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       const times = (studentsObj[k]?.blocked_times || []).map(bt => 
         `${bt.day}-${bt.start}-${bt.end}-${bt.label || ''}`
       ).sort();
-      return `${k}:${times.join('|')}`;
+      const overlaps = (studentsObj[k]?.can_overlap || []).sort().join(',');
+      return `${k}:${times.join('|')}:${overlaps}`;
     });
     return `${keys.join(',')}:${schedules.join(';')}:${names.sort().join(',')}`;
   };
@@ -93,8 +94,8 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
     const currentKey = getStudentsKey(students, studentNames);
     const prevKey = prevStudentsRef.current;
     
-    // Only update if the key actually changed
-    if (currentKey !== prevKey) {
+    // Always initialize on first mount, or if the key actually changed
+    if (isInitialMount.current || currentKey !== prevKey) {
       const schedules = {};
       
       // Add students from the students prop (uploaded/managed)
@@ -102,7 +103,9 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       if (students) {
         Object.keys(students).forEach(studentName => {
           schedules[studentName] = students[studentName].blocked_times || [];
-          overlaps[studentName] = students[studentName].can_overlap || [];
+          // Ensure can_overlap is an array
+          const canOverlap = students[studentName].can_overlap;
+          overlaps[studentName] = Array.isArray(canOverlap) ? canOverlap : [];
         });
       }
       
@@ -119,6 +122,10 @@ const StudentSchedulesView = ({ students, studentNames = [], onUpdate }) => {
       setStudentSchedules(schedules);
       setStudentOverlaps(overlaps);
       prevStudentsRef.current = currentKey;
+      
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+      }
     }
   }, [students, studentNames]);
 

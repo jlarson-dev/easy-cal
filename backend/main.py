@@ -198,7 +198,8 @@ async def load_schedules():
                         "label": bt.label if bt.label else None
                     }
                     for bt in schedule.blocked_times
-                ]
+                ],
+                "can_overlap": schedule.can_overlap or []
             }
             for name, schedule in schedules.items()
         }

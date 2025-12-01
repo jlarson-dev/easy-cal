@@ -266,7 +266,6 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
 
       <div className="students-section">
         <h3>Students</h3>
-        <button onClick={addStudent} className="add-button">+ Add Student</button>
         
         {students.map((student, studentIndex) => (
           <div key={studentIndex} className="student-card">
@@ -399,6 +398,8 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
             </div>
           </div>
         ))}
+        
+        <button onClick={addStudent} className="add-button">+ Add Student</button>
       </div>
     </div>
   );

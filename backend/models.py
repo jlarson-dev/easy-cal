@@ -16,15 +16,15 @@ class StudentSchedule(BaseModel):
 
 class SubjectConfig(BaseModel):
     name: str
-    hours_per_week: float
-    frequency_per_week: int  # How many times per week
+    constraint_type: str  # "daily" or "weekly"
+    daily_minutes: Optional[int] = None  # Required if constraint_type is "daily"
+    weekly_days: Optional[int] = None  # Number of sessions per week, required if "weekly"
+    weekly_minutes_per_session: Optional[int] = None  # Minutes per session, required if "weekly"
 
 
 class StudentConfig(BaseModel):
     name: str
     subjects: List[SubjectConfig]
-    daily_minimum_hours: float
-    weekly_total_hours: float
 
 
 class WorkingHours(BaseModel):

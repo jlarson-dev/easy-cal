@@ -32,9 +32,7 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
   const addStudent = () => {
     const newStudent = {
       name: '',
-      subjects: [],
-      daily_minimum_hours: 1.0,
-      weekly_total_hours: 5.0
+      subjects: []
     };
     setStudents([...students, newStudent]);
   };
@@ -60,7 +58,13 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
     const updated = [...students];
     updated[studentIndex].subjects = [
       ...updated[studentIndex].subjects,
-      { name: '', hours_per_week: 2.0, frequency_per_week: 2 }
+      { 
+        name: '', 
+        constraint_type: 'weekly',
+        daily_minutes: null,
+        weekly_days: 2,
+        weekly_minutes_per_session: 30
+      }
     ];
     setStudents(updated);
     notifyConfigChange();
@@ -77,10 +81,24 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
 
   const updateSubject = (studentIndex, subjectIndex, field, value) => {
     const updated = [...students];
-    updated[studentIndex].subjects[subjectIndex] = {
-      ...updated[studentIndex].subjects[subjectIndex],
-      [field]: field === 'name' ? value : parseFloat(value) || 0
-    };
+    const subject = updated[studentIndex].subjects[subjectIndex];
+    
+    if (field === 'constraint_type') {
+      // Reset constraint values when type changes
+      updated[studentIndex].subjects[subjectIndex] = {
+        ...subject,
+        constraint_type: value,
+        daily_minutes: value === 'daily' ? (subject.daily_minutes || 30) : null,
+        weekly_days: value === 'weekly' ? (subject.weekly_days || 2) : null,
+        weekly_minutes_per_session: value === 'weekly' ? (subject.weekly_minutes_per_session || 30) : null
+      };
+    } else {
+      updated[studentIndex].subjects[subjectIndex] = {
+        ...subject,
+        [field]: field === 'name' ? value : (field.includes('minutes') || field.includes('days') ? parseInt(value) || 0 : value)
+      };
+    }
+    
     setStudents(updated);
     notifyConfigChange();
   };
@@ -292,77 +310,92 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
               </button>
             </div>
             
-            <div className="student-requirements">
-              <label>
-                Daily Minimum Hours:
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={student.daily_minimum_hours}
-                  onChange={(e) => updateStudent(studentIndex, 'daily_minimum_hours', e.target.value)}
-                />
-              </label>
-              <label>
-                Weekly Total Hours:
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={student.weekly_total_hours}
-                  onChange={(e) => updateStudent(studentIndex, 'weekly_total_hours', e.target.value)}
-                />
-              </label>
-            </div>
-
             <div className="subjects-section">
               <h4>Subjects</h4>
+              
+              {student.subjects.map((subject, subjectIndex) => (
+                <div key={subjectIndex} className="subject-card">
+                  <div className="subject-header-row">
+                    <label className="subject-name-label">
+                      Subject:
+                      <select
+                        value={subject.name || ''}
+                        onChange={(e) => updateSubject(studentIndex, subjectIndex, 'name', e.target.value)}
+                      >
+                        <option value="">Select a subject</option>
+                        {masterSubjects.map(subj => (
+                          <option key={subj} value={subj}>{subj}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      onClick={() => removeSubject(studentIndex, subjectIndex)}
+                      className="remove-button small"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  
+                  <div className="subject-constraints">
+                    <label className="constraint-type-label">
+                      Constraint Type:
+                      <select
+                        value={subject.constraint_type || 'weekly'}
+                        onChange={(e) => updateSubject(studentIndex, subjectIndex, 'constraint_type', e.target.value)}
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Variable Days</option>
+                      </select>
+                    </label>
+                    
+                    {subject.constraint_type === 'daily' && (
+                      <label>
+                        Daily Minutes:
+                        <input
+                          type="number"
+                          step="5"
+                          min="5"
+                          value={subject.daily_minutes || ''}
+                          onChange={(e) => updateSubject(studentIndex, subjectIndex, 'daily_minutes', e.target.value)}
+                          placeholder="e.g., 30"
+                        />
+                      </label>
+                    )}
+                    
+                    {subject.constraint_type === 'weekly' && (
+                      <>
+                        <label>
+                          Days per Week:
+                          <input
+                            type="number"
+                            step="1"
+                            min="1"
+                            max="7"
+                            value={subject.weekly_days || ''}
+                            onChange={(e) => updateSubject(studentIndex, subjectIndex, 'weekly_days', e.target.value)}
+                            placeholder="e.g., 3"
+                          />
+                        </label>
+                        <label>
+                          Minutes per Session:
+                          <input
+                            type="number"
+                            step="5"
+                            min="5"
+                            value={subject.weekly_minutes_per_session || ''}
+                            onChange={(e) => updateSubject(studentIndex, subjectIndex, 'weekly_minutes_per_session', e.target.value)}
+                            placeholder="e.g., 45"
+                          />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
               <button onClick={() => addSubject(studentIndex)} className="add-button small">
                 + Add Subject
               </button>
-              
-              {student.subjects.map((subject, subjectIndex) => (
-                <div key={subjectIndex} className="subject-row">
-                  <label>
-                    Subject:
-                    <select
-                      value={subject.name}
-                      onChange={(e) => updateSubject(studentIndex, subjectIndex, 'name', e.target.value)}
-                    >
-                      <option value="">Select a subject</option>
-                      {masterSubjects.map(subj => (
-                        <option key={subj} value={subj}>{subj}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Hours/Week:
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={subject.hours_per_week}
-                      onChange={(e) => updateSubject(studentIndex, subjectIndex, 'hours_per_week', e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Frequency/Week:
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={subject.frequency_per_week}
-                      onChange={(e) => updateSubject(studentIndex, subjectIndex, 'frequency_per_week', e.target.value)}
-                    />
-                  </label>
-                  <button
-                    onClick={() => removeSubject(studentIndex, subjectIndex)}
-                    className="remove-button small"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
             </div>
           </div>
         ))}

@@ -128,13 +128,15 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
     # Convert student configs to dict for easier access
     student_config_dict = {config.name: config for config in request.student_configs}
     
-    # Track scheduled hours per student per subject
-    scheduled_hours: Dict[str, Dict[str, float]] = {}
-    daily_hours: Dict[str, Dict[str, float]] = {}  # day -> student -> hours
+    # Track scheduled minutes per student per subject per day
+    scheduled_minutes_by_day: Dict[str, Dict[str, Dict[str, int]]] = {}  # student -> subject -> day -> minutes
+    scheduled_weekly_minutes: Dict[str, Dict[str, int]] = {}  # student -> subject -> total weekly minutes
+    scheduled_weekly_sessions: Dict[str, Dict[str, int]] = {}  # student -> subject -> number of sessions
     
     for config in request.student_configs:
-        scheduled_hours[config.name] = {subj.name: 0.0 for subj in config.subjects}
-        daily_hours[config.name] = {}
+        scheduled_minutes_by_day[config.name] = {subj.name: {} for subj in config.subjects}
+        scheduled_weekly_minutes[config.name] = {subj.name: 0 for subj in config.subjects}
+        scheduled_weekly_sessions[config.name] = {subj.name: 0 for subj in config.subjects}
     
     # Add lunch time slots (fixed)
     lunch_mins = time_to_minutes(request.lunch_time)
@@ -148,9 +150,10 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
             type="lunch"
         ))
         
-        # Initialize daily hours tracking
-        for student_name in scheduled_hours.keys():
-            daily_hours[student_name][day] = 0.0
+        # Initialize daily minutes tracking for each subject
+        for student_name in scheduled_minutes_by_day.keys():
+            for subject_name in scheduled_minutes_by_day[student_name].keys():
+                scheduled_minutes_by_day[student_name][subject_name][day] = 0
     
     # Get blocked slots for each day (from student schedules)
     blocked_by_day: Dict[str, List[tuple]] = {}
@@ -210,76 +213,136 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
             slot_duration
         )
     
-    # Sort students by priority (more hours = higher priority)
+    # Sort students by priority (more subjects = higher priority, or by total minutes needed)
+    def get_student_priority(student_config):
+        total_minutes = 0
+        for subject in student_config.subjects:
+            if subject.constraint_type == "daily" and subject.daily_minutes:
+                total_minutes += subject.daily_minutes * len(request.working_hours.days)
+            if subject.constraint_type == "weekly":
+                if subject.weekly_days and subject.weekly_minutes_per_session:
+                    total_minutes += subject.weekly_days * subject.weekly_minutes_per_session
+        return total_minutes
+    
     student_priority = sorted(
         request.student_configs,
-        key=lambda s: s.weekly_total_hours,
+        key=get_student_priority,
         reverse=True
     )
     
-    # Schedule sessions: try to meet weekly requirements first
+    # Schedule subjects: prioritize daily constraints first, then weekly
     for student_config in student_priority:
         student_name = student_config.name
         
-        # Schedule each subject
+        # First pass: Schedule daily constraints (highest priority)
         for subject in student_config.subjects:
-            hours_needed = subject.hours_per_week
-            sessions_needed = subject.frequency_per_week
-            hours_per_session = hours_needed / sessions_needed if sessions_needed > 0 else 0
-            
-            sessions_scheduled = 0
-            
-            # Try to schedule sessions across days
-            for day in request.working_hours.days:
-                if sessions_scheduled >= sessions_needed:
-                    break
-                
-                if day not in available_by_day:
+            if subject.constraint_type == "daily" and subject.daily_minutes:
+                # Schedule daily_minutes on every working day
+                for day in request.working_hours.days:
+                    if day not in available_by_day:
+                        continue
+                    
+                    available_slots = available_by_day[day]
+                    minutes_needed = subject.daily_minutes
+                    slots_needed = int((minutes_needed + slot_duration - 1) / slot_duration)  # Ceiling division
+                    if slots_needed == 0:
+                        slots_needed = 1
+                    
+                    # Find consecutive available slots
+                    for i in range(len(available_slots) - slots_needed + 1):
+                        consecutive_slots = available_slots[i:i + slots_needed]
+                        slot_start_mins = consecutive_slots[0][0]
+                        slot_end_mins = consecutive_slots[-1][1]
+                        actual_minutes = slot_end_mins - slot_start_mins
+                        
+                        # Check if we have enough time
+                        if actual_minutes >= minutes_needed:
+                            # Double-check: ensure no overlap with lunch
+                            lunch_start_mins = lunch_mins
+                            lunch_end_mins = lunch_mins + 60
+                            overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
+                            
+                            if not overlaps_lunch:
+                                # Create session
+                                schedule.append(TimeSlot(
+                                    day=day,
+                                    start=minutes_to_time(slot_start_mins),
+                                    end=minutes_to_time(slot_end_mins),
+                                    student=student_name,
+                                    subject=subject.name,
+                                    type="session"
+                                ))
+                                
+                                # Update tracking
+                                scheduled_minutes_by_day[student_name][subject.name][day] = actual_minutes
+                                scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
+                                scheduled_weekly_sessions[student_name][subject.name] += 1
+                                
+                                # Remove used slots
+                                available_slots = available_slots[i + slots_needed:]
+                                available_by_day[day] = available_slots
+                                break
+        
+        # Second pass: Schedule weekly constraints
+        for subject in student_config.subjects:
+            if subject.constraint_type == "weekly":
+                if not subject.weekly_days or not subject.weekly_minutes_per_session:
                     continue
                 
-                # Check if we can add a session on this day
-                available_slots = available_by_day[day]
+                minutes_per_session = subject.weekly_minutes_per_session
+                current_sessions = scheduled_weekly_sessions[student_name][subject.name]
+                sessions_needed = subject.weekly_days
                 
-                # Calculate how many slots we need for this session
-                slots_needed = int((hours_per_session * 60) / slot_duration)
-                if slots_needed == 0:
-                    slots_needed = 1
-                
-                # Find consecutive available slots
-                for i in range(len(available_slots) - slots_needed + 1):
-                    consecutive_slots = available_slots[i:i + slots_needed]
-                    
-                    # Slots are already filtered to exclude lunch/prep/blocked
-                    # So we can use them directly
-                    slot_start_mins = consecutive_slots[0][0]
-                    slot_end_mins = consecutive_slots[-1][1]
-                    
-                    # Double-check: ensure no overlap with lunch (shouldn't happen, but safety check)
-                    lunch_start_mins = lunch_mins
-                    lunch_end_mins = lunch_mins + 60
-                    
-                    overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
-                    
-                    if not overlaps_lunch:
-                        # Create session
-                        schedule.append(TimeSlot(
-                            day=day,
-                            start=minutes_to_time(slot_start_mins),
-                            end=minutes_to_time(slot_end_mins),
-                            student=student_name,
-                            subject=subject.name,
-                            type="session"
-                        ))
-                        
-                        # Update tracking
-                        scheduled_hours[student_name][subject.name] += hours_per_session
-                        daily_hours[student_name][day] += hours_per_session
-                        sessions_scheduled += 1
-                        
-                        # Remove used slots
-                        available_slots = available_slots[i + slots_needed:]
-                        available_by_day[day] = available_slots
+                # Try to schedule remaining sessions across days
+                sessions_to_schedule = sessions_needed - current_sessions
+                for day in request.working_hours.days:
+                    if sessions_to_schedule <= 0:
                         break
+                    
+                    if day not in available_by_day:
+                        continue
+                    
+                    available_slots = available_by_day[day]
+                    slots_needed = int((minutes_per_session + slot_duration - 1) / slot_duration)
+                    if slots_needed == 0:
+                        slots_needed = 1
+                    
+                    # Find consecutive available slots
+                    for i in range(len(available_slots) - slots_needed + 1):
+                        consecutive_slots = available_slots[i:i + slots_needed]
+                        slot_start_mins = consecutive_slots[0][0]
+                        slot_end_mins = consecutive_slots[-1][1]
+                        actual_minutes = slot_end_mins - slot_start_mins
+                        
+                        if actual_minutes >= minutes_per_session:
+                            # Double-check: ensure no overlap with lunch
+                            lunch_start_mins = lunch_mins
+                            lunch_end_mins = lunch_mins + 60
+                            overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
+                            
+                            if not overlaps_lunch:
+                                # Create session
+                                schedule.append(TimeSlot(
+                                    day=day,
+                                    start=minutes_to_time(slot_start_mins),
+                                    end=minutes_to_time(slot_end_mins),
+                                    student=student_name,
+                                    subject=subject.name,
+                                    type="session"
+                                ))
+                                
+                                # Update tracking
+                                if day not in scheduled_minutes_by_day[student_name][subject.name]:
+                                    scheduled_minutes_by_day[student_name][subject.name][day] = 0
+                                scheduled_minutes_by_day[student_name][subject.name][day] += actual_minutes
+                                scheduled_weekly_minutes[student_name][subject.name] += actual_minutes
+                                scheduled_weekly_sessions[student_name][subject.name] += 1
+                                sessions_to_schedule -= 1
+                                
+                                # Remove used slots
+                                available_slots = available_slots[i + slots_needed:]
+                                available_by_day[day] = available_slots
+                                break
     
     # Schedule flexible prep time (1 hour per day if required)
     if request.prep_time_required:
@@ -356,32 +419,37 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
     for student_config in request.student_configs:
         student_name = student_config.name
         
-        # Check weekly subject hours
         for subject in student_config.subjects:
-            scheduled = scheduled_hours[student_name][subject.name]
-            needed = subject.hours_per_week
-            if scheduled < needed - 0.1:  # Allow small floating point errors
-                conflicts.append(
-                    f"{student_name} - {subject.name}: "
-                    f"Scheduled {scheduled:.1f}h, needed {needed:.1f}h"
-                )
-        
-        # Check weekly total hours
-        total_scheduled = sum(scheduled_hours[student_name].values())
-        if total_scheduled < student_config.weekly_total_hours - 0.1:
-            conflicts.append(
-                f"{student_name} total hours: "
-                f"Scheduled {total_scheduled:.1f}h, needed {student_config.weekly_total_hours:.1f}h"
-            )
-        
-        # Check daily minimum hours
-        for day in request.working_hours.days:
-            daily = daily_hours[student_name].get(day, 0.0)
-            if daily < student_config.daily_minimum_hours - 0.1:
-                conflicts.append(
-                    f"{student_name} on {day}: "
-                    f"Scheduled {daily:.1f}h, minimum {student_config.daily_minimum_hours:.1f}h"
-                )
+            # Check daily constraints
+            if subject.constraint_type == "daily" and subject.daily_minutes:
+                for day in request.working_hours.days:
+                    scheduled_minutes = scheduled_minutes_by_day[student_name][subject.name].get(day, 0)
+                    if scheduled_minutes < subject.daily_minutes:
+                        conflicts.append(
+                            f"{student_name} - {subject.name} on {day}: "
+                            f"Scheduled {scheduled_minutes}min, needed {subject.daily_minutes}min daily"
+                        )
+            
+            # Check weekly constraints
+            if subject.constraint_type == "weekly":
+                if subject.weekly_days and subject.weekly_minutes_per_session:
+                    scheduled_sessions = scheduled_weekly_sessions[student_name][subject.name]
+                    scheduled_minutes = scheduled_weekly_minutes[student_name][subject.name]
+                    needed_sessions = subject.weekly_days
+                    needed_minutes = subject.weekly_days * subject.weekly_minutes_per_session
+                    
+                    if scheduled_sessions < needed_sessions:
+                        conflicts.append(
+                            f"{student_name} - {subject.name}: "
+                            f"Scheduled {scheduled_sessions} sessions, needed {needed_sessions} sessions per week"
+                        )
+                    
+                    if scheduled_minutes < needed_minutes:
+                        conflicts.append(
+                            f"{student_name} - {subject.name}: "
+                            f"Scheduled {scheduled_minutes}min total, needed {needed_minutes}min per week "
+                            f"({needed_sessions} sessions × {subject.weekly_minutes_per_session}min)"
+                        )
     
     # Sort schedule by day and time
     day_order = {day: i for i, day in enumerate(request.working_hours.days)}

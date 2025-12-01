@@ -128,11 +128,11 @@ function App() {
           name: student.name,
           subjects: student.subjects.map(subj => ({
             name: subj.name,
-            hours_per_week: subj.hours_per_week,
-            frequency_per_week: subj.frequency_per_week
-          })),
-          daily_minimum_hours: student.daily_minimum_hours,
-          weekly_total_hours: student.weekly_total_hours
+            constraint_type: subj.constraint_type || 'weekly',
+            daily_minutes: subj.daily_minutes || null,
+            weekly_days: subj.weekly_days || null,
+            weekly_minutes_per_session: subj.weekly_minutes_per_session || null
+          }))
         });
       });
 

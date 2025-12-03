@@ -186,11 +186,14 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
     scheduled_minutes_by_day: Dict[str, Dict[str, Dict[str, int]]] = {}  # student -> subject -> day -> minutes
     scheduled_weekly_minutes: Dict[str, Dict[str, int]] = {}  # student -> subject -> total weekly minutes
     scheduled_weekly_sessions: Dict[str, Dict[str, int]] = {}  # student -> subject -> number of sessions
+    # Track which subjects have been scheduled per student per day (for weekly constraints - prevent same subject twice per day)
+    weekly_subjects_by_day: Dict[str, Dict[str, set]] = {}  # student -> day -> set of subject names
     
     for config in request.student_configs:
         scheduled_minutes_by_day[config.name] = {subj.name: {} for subj in config.subjects}
         scheduled_weekly_minutes[config.name] = {subj.name: 0 for subj in config.subjects}
         scheduled_weekly_sessions[config.name] = {subj.name: 0 for subj in config.subjects}
+        weekly_subjects_by_day[config.name] = {}
     
     # Add lunch time slots (fixed)
     lunch_mins = time_to_minutes(request.lunch_time)
@@ -208,6 +211,9 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
         for student_name in scheduled_minutes_by_day.keys():
             for subject_name in scheduled_minutes_by_day[student_name].keys():
                 scheduled_minutes_by_day[student_name][subject_name][day] = 0
+            # Initialize weekly subjects tracking for this day
+            if day not in weekly_subjects_by_day[student_name]:
+                weekly_subjects_by_day[student_name][day] = set()
     
     # Get blocked slots for each day (from student schedules)
     blocked_by_day: Dict[str, List[tuple]] = {}
@@ -443,12 +449,15 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
             # Continue scheduling until all students needing this subject are scheduled
             while True:
                 # Filter to students who still need this subject (weekly constraint)
+                # AND who haven't already been scheduled for this subject on this day
                 remaining_students = []
                 for student_name in students_needing:
                     current_sessions = scheduled_weekly_sessions[student_name][subject_name]
                     sessions_needed = next((subj.weekly_days for subj in student_config_dict[student_name].subjects 
                                           if subj.name == subject_name and subj.constraint_type == "weekly"), 0)
-                    if current_sessions < sessions_needed:
+                    # Check if student still needs sessions AND hasn't been scheduled for this subject on this day
+                    already_scheduled_today = subject_name in weekly_subjects_by_day[student_name].get(day, set())
+                    if current_sessions < sessions_needed and not already_scheduled_today:
                         remaining_students.append(student_name)
                 
                 if not remaining_students:
@@ -540,6 +549,10 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                         scheduled_minutes_by_day[student][subject_name][day] += actual_minutes
                         scheduled_weekly_minutes[student][subject_name] += actual_minutes
                         scheduled_weekly_sessions[student][subject_name] += 1
+                        # Mark that this subject has been scheduled for this student on this day
+                        if day not in weekly_subjects_by_day[student]:
+                            weekly_subjects_by_day[student][day] = set()
+                        weekly_subjects_by_day[student][day].add(subject_name)
                     
                     # Remove used slots
                     slots_used = int((actual_minutes + slot_duration - 1) / slot_duration)

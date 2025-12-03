@@ -26,6 +26,7 @@ class SubjectConfig(BaseModel):
 class StudentConfig(BaseModel):
     name: str
     subjects: List[SubjectConfig]
+    color: Optional[str] = None  # Hex color code for schedule display
 
 
 class WorkingHours(BaseModel):

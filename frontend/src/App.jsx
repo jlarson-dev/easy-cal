@@ -183,7 +183,8 @@ function App() {
             daily_minutes: subj.daily_minutes || null,
             weekly_days: subj.weekly_days || null,
             weekly_minutes_per_session: subj.weekly_minutes_per_session || null
-          }))
+          })),
+          color: student.color || null
         });
       });
 
@@ -274,6 +275,9 @@ function App() {
               <ScheduleDisplay
                 scheduleData={schedule}
                 workingDays={config?.workingHours?.days || []}
+                studentColors={config?.students ? 
+                  Object.fromEntries(config.students.map(s => [s.name, s.color || '#87ceeb'])) 
+                  : {}}
               />
             </section>
           )}

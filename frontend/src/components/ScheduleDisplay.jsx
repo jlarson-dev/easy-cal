@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
+const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {} }) => {
   const [exportFormat, setExportFormat] = useState('json');
 
   if (!scheduleData || !scheduleData.schedule) {
@@ -48,7 +48,14 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
       case 'blocked':
         return '#ffcccc';
       case 'session':
-        return '#87ceeb';
+        // For multi-student sessions, use the first student's color
+        // For single-student sessions, use that student's color
+        const studentName = slot.students && slot.students.length > 0 
+          ? slot.students[0] 
+          : slot.student;
+        return studentName && studentColors[studentName] 
+          ? studentColors[studentName] 
+          : '#87ceeb'; // Default color
       default:
         return '#f0f0f0';
     }

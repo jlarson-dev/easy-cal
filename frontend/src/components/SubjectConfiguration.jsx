@@ -29,10 +29,34 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+  // Color palette for students
+  const colorPalette = [
+    '#87ceeb', // Sky blue (default)
+    '#ffb6c1', // Light pink
+    '#98fb98', // Pale green
+    '#dda0dd', // Plum
+    '#f0e68c', // Khaki
+    '#ffa07a', // Light salmon
+    '#87cefa', // Light sky blue
+    '#ffd700', // Gold
+    '#90ee90', // Light green
+    '#ff69b4', // Hot pink
+    '#20b2aa', // Light sea green
+    '#ff6347', // Tomato
+  ];
+
   const addStudent = () => {
+    // Assign a color that hasn't been used yet, or cycle through palette
+    const usedColors = students.map(s => s.color).filter(Boolean);
+    const availableColors = colorPalette.filter(c => !usedColors.includes(c));
+    const defaultColor = availableColors.length > 0 
+      ? availableColors[0] 
+      : colorPalette[students.length % colorPalette.length];
+    
     const newStudent = {
       name: '',
-      subjects: []
+      subjects: [],
+      color: defaultColor
     };
     setStudents([...students, newStudent]);
   };
@@ -270,40 +294,57 @@ const SubjectConfiguration = ({ onConfigChange, uploadedStudents = [] }) => {
         {students.map((student, studentIndex) => (
           <div key={studentIndex} className="student-card">
             <div className="student-header">
-              {uploadedStudents.length > 0 ? (
-                <select
-                  value={student.name}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom__') {
-                      // Switch to text input for custom name
-                      const input = prompt('Enter student name:');
-                      if (input && input.trim()) {
-                        updateStudent(studentIndex, 'name', input.trim());
+              <div className="student-name-color-row">
+                {uploadedStudents.length > 0 ? (
+                  <select
+                    value={student.name}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        // Switch to text input for custom name
+                        const input = prompt('Enter student name:');
+                        if (input && input.trim()) {
+                          updateStudent(studentIndex, 'name', input.trim());
+                        }
+                      } else {
+                        updateStudent(studentIndex, 'name', e.target.value);
                       }
-                    } else {
-                      updateStudent(studentIndex, 'name', e.target.value);
-                    }
-                  }}
-                  className="student-name-select"
-                >
-                  <option value="">Select a student...</option>
-                  {uploadedStudents.map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                  {Array.from(customStudentNames).map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                  <option value="__custom__">+ Add custom student name</option>
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  placeholder="Student name"
-                  value={student.name}
-                  onChange={(e) => updateStudent(studentIndex, 'name', e.target.value)}
-                  className="student-name-input"
-                />
-              )}
+                    }}
+                    className="student-name-select"
+                  >
+                    <option value="">Select a student...</option>
+                    {uploadedStudents.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                    {Array.from(customStudentNames).map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                    <option value="__custom__">+ Add custom student name</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="Student name"
+                    value={student.name}
+                    onChange={(e) => updateStudent(studentIndex, 'name', e.target.value)}
+                    className="student-name-input"
+                  />
+                )}
+                <div className="color-picker-container">
+                  <label className="color-picker-label">Color:</label>
+                  <div className="color-picker">
+                    {colorPalette.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`color-option ${(student.color || colorPalette[0]) === color ? 'selected' : ''}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => updateStudent(studentIndex, 'color', color)}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
               <button onClick={() => removeStudent(studentIndex)} className="remove-button">
                 Remove
               </button>

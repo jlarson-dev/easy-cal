@@ -400,11 +400,21 @@ body {
   gap: 1rem;
   align-items: center;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.student-name-color-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
 }
 
 .student-name-input,
 .student-name-select {
   flex: 1;
+  min-width: 200px;
   padding: 0.75rem;
   border: 2px solid #ddd;
   border-radius: 4px;
@@ -412,6 +422,48 @@ body {
   font-weight: 600;
   background: white;
   cursor: pointer;
+}
+
+.color-picker-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.color-picker-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #666;
+  white-space: nowrap;
+}
+
+.color-picker {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.color-option {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+  background: none;
+}
+
+.color-option:hover {
+  transform: scale(1.1);
+  border-color: #667eea;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.color-option.selected {
+  border-color: #333;
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
 }
 
 .student-name-select {

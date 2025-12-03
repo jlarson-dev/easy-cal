@@ -50,8 +50,17 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
     }
   };
 
+  // Convert 24-hour time to 12-hour format
+  const to12Hour = (time24) => {
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+  };
+
   const formatTime = (timeStr) => {
-    return timeStr;
+    return to12Hour(timeStr);
   };
 
   const exportSchedule = () => {
@@ -69,7 +78,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
           ? slot.students.join('; ')
           : (slot.student || '');
         rows.push(
-          `${slot.day},${slot.start},${slot.end},${slot.type},"${students}",${slot.subject || ''},${slot.label || ''}`
+          `${slot.day},${to12Hour(slot.start)},${to12Hour(slot.end)},${slot.type},"${students}",${slot.subject || ''},${slot.label || ''}`
         );
       });
       content = rows.join('\n');
@@ -85,13 +94,13 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
             const students = slot.students && slot.students.length > 0
               ? slot.students.join(', ')
               : slot.student;
-            lines.push(`  ${slot.start} - ${slot.end}: ${students} - ${slot.subject}`);
+            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: ${students} - ${slot.subject}`);
           } else if (slot.type === 'lunch') {
-            lines.push(`  ${slot.start} - ${slot.end}: LUNCH`);
+            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: LUNCH`);
           } else if (slot.type === 'prep') {
-            lines.push(`  ${slot.start} - ${slot.end}: PREP TIME`);
+            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: PREP TIME`);
           } else if (slot.type === 'blocked') {
-            lines.push(`  ${slot.start} - ${slot.end}: BLOCKED${slot.label ? ` - ${slot.label}` : ''}`);
+            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: BLOCKED${slot.label ? ` - ${slot.label}` : ''}`);
           }
         });
       });
@@ -140,7 +149,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
                   key={index}
                   className="time-slot"
                   style={{ backgroundColor: getSlotColor(slot) }}
-                  title={`${slot.start} - ${slot.end}: ${slot.type === 'session' ? `${slot.students ? slot.students.join(', ') : slot.student} - ${slot.subject}` : slot.type.toUpperCase()}${slot.type === 'blocked' && slot.label ? ` - ${slot.label}` : ''}`}
+                  title={`${to12Hour(slot.start)} - ${to12Hour(slot.end)}: ${slot.type === 'session' ? `${slot.students ? slot.students.join(', ') : slot.student} - ${slot.subject}` : slot.type.toUpperCase()}${slot.type === 'blocked' && slot.label ? ` - ${slot.label}` : ''}`}
                 >
                   <div className="slot-time">{formatTime(slot.start)} - {formatTime(slot.end)}</div>
                   {slot.type === 'session' && (

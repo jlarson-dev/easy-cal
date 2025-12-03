@@ -20,6 +20,10 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
   });
 
   schedule.forEach(slot => {
+    // Filter out blocked times from display
+    if (slot.type === 'blocked') {
+      return;
+    }
     if (!scheduleByDay[slot.day]) {
       scheduleByDay[slot.day] = [];
     }
@@ -74,6 +78,10 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
       // CSV format: Day, Start, End, Type, Student(s), Subject, Label
       const rows = ['Day,Start,End,Type,Student(s),Subject,Label'];
       schedule.forEach(slot => {
+        // Filter out blocked times from CSV export
+        if (slot.type === 'blocked') {
+          return;
+        }
         const students = slot.students && slot.students.length > 0
           ? slot.students.join('; ')
           : (slot.student || '');
@@ -90,6 +98,10 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
         lines.push(`\n${day}:`);
         lines.push('─'.repeat(50));
         scheduleByDay[day]?.forEach(slot => {
+          // Filter out blocked times from text export
+          if (slot.type === 'blocked') {
+            return;
+          }
           if (slot.type === 'session') {
             const students = slot.students && slot.students.length > 0
               ? slot.students.join(', ')
@@ -99,8 +111,6 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
             lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: LUNCH`);
           } else if (slot.type === 'prep') {
             lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: PREP TIME`);
-          } else if (slot.type === 'blocked') {
-            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: BLOCKED${slot.label ? ` - ${slot.label}` : ''}`);
           }
         });
       });
@@ -149,7 +159,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
                   key={index}
                   className="time-slot"
                   style={{ backgroundColor: getSlotColor(slot) }}
-                  title={`${to12Hour(slot.start)} - ${to12Hour(slot.end)}: ${slot.type === 'session' ? `${slot.students ? slot.students.join(', ') : slot.student} - ${slot.subject}` : slot.type.toUpperCase()}${slot.type === 'blocked' && slot.label ? ` - ${slot.label}` : ''}`}
+                  title={`${to12Hour(slot.start)} - ${to12Hour(slot.end)}: ${slot.type === 'session' ? `${slot.students ? slot.students.join(', ') : slot.student} - ${slot.subject}` : slot.type.toUpperCase()}`}
                 >
                   <div className="slot-time">{formatTime(slot.start)} - {formatTime(slot.end)}</div>
                   {slot.type === 'session' && (
@@ -164,11 +174,6 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
                   )}
                   {slot.type === 'lunch' && <div className="slot-label">LUNCH</div>}
                   {slot.type === 'prep' && <div className="slot-label">PREP</div>}
-                  {slot.type === 'blocked' && (
-                    <div className="slot-label">
-                      BLOCKED{slot.label && <span className="blocked-label-text">: {slot.label}</span>}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -202,10 +207,6 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [] }) => {
           <div className="legend-item">
             <div className="legend-color" style={{ backgroundColor: '#90ee90' }}></div>
             <span>Prep Time</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{ backgroundColor: '#ffcccc' }}></div>
-            <span>Blocked</span>
           </div>
         </div>
       </div>

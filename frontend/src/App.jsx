@@ -278,6 +278,11 @@ function App() {
                 studentColors={config?.students ? 
                   Object.fromEntries(config.students.map(s => [s.name, s.color || '#87ceeb'])) 
                   : {}}
+                studentSchedules={studentSchedulesData}
+                config={config}
+                onScheduleUpdate={(updatedSchedule) => {
+                  setSchedule(updatedSchedule);
+                }}
               />
             </section>
           )}

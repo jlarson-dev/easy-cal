@@ -2,8 +2,11 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import StudentScheduleUpload from './components/StudentScheduleUpload';
 import StudentSchedulesView from './components/StudentSchedulesView';
 import DeletedStudentsView from './components/DeletedStudentsView';
-import SubjectConfiguration from './components/SubjectConfiguration';
+import SubjectManagement from './components/SubjectManagement';
+import SchedulerConfiguration from './components/SchedulerConfiguration';
 import ScheduleDisplay from './components/ScheduleDisplay';
+import SavedSchedulesManager from './components/SavedSchedulesManager';
+import Tabs from './components/Tabs';
 import { generateSchedule, loadSchedules, reloadSchedules } from './services/api';
 import './styles/App.css';
 
@@ -198,62 +201,77 @@ function App() {
     }
   };
 
-  return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Student Schedule Generator</h1>
-        <p>Generate optimized weekly schedules for multiple students</p>
-      </header>
+  const [activeTab, setActiveTab] = useState('students');
 
-      <main className="app-main">
-        <div className="app-content">
-              <section className="input-section">
-                <StudentScheduleUpload onUploadSuccess={handleUploadSuccess} />
-                
-                <div className="reload-section">
-                  <button
-                    onClick={async () => {
-                      try {
-                        const result = await reloadSchedules();
-                        handleSchedulesReloaded(result.students, result.changes);
-                      } catch (err) {
-                        console.error('Failed to reload schedules:', err);
-                      }
-                    }}
-                    className="reload-button"
-                  >
-                    Reload Schedules
-                  </button>
-                </div>
-                
-                <StudentSchedulesView
-                  students={studentSchedulesData}
-                  studentNames={allStudentNames}
-                  onUpdate={handleSchedulesUpdate}
-                />
+  const tabs = [
+    {
+      id: 'students',
+      label: 'Students',
+      content: (
+        <section className="input-section">
+          <StudentScheduleUpload onUploadSuccess={handleUploadSuccess} />
+          
+          <div className="reload-section">
+            <button
+              onClick={async () => {
+                try {
+                  const result = await reloadSchedules();
+                  handleSchedulesReloaded(result.students, result.changes);
+                } catch (err) {
+                  console.error('Failed to reload schedules:', err);
+                }
+              }}
+              className="reload-button"
+            >
+              Reload Schedules
+            </button>
+          </div>
+          
+          <StudentSchedulesView
+            students={studentSchedulesData}
+            studentNames={allStudentNames}
+            onUpdate={handleSchedulesUpdate}
+          />
 
-                <DeletedStudentsView
-                  onRestore={async () => {
-                    // Reload schedules after restoration
-                    try {
-                      const loadResult = await loadSchedules();
-                      if (loadResult.students) {
-                        setPersistedSchedules(loadResult.students);
-                        setManagedSchedules(prev => {
-                          const merged = { ...prev };
-                          Object.keys(loadResult.students).forEach(studentName => {
-                            merged[studentName] = loadResult.students[studentName].blocked_times || [];
-                          });
-                          return merged;
-                        });
-                      }
-                    } catch (err) {
-                      console.error('Failed to reload schedules:', err);
-                    }
-                  }}
-                />
-            
-            <SubjectConfiguration
+          <DeletedStudentsView
+            onRestore={async () => {
+              // Reload schedules after restoration
+              try {
+                const loadResult = await loadSchedules();
+                if (loadResult.students) {
+                  setPersistedSchedules(loadResult.students);
+                  setManagedSchedules(prev => {
+                    const merged = { ...prev };
+                    Object.keys(loadResult.students).forEach(studentName => {
+                      merged[studentName] = loadResult.students[studentName].blocked_times || [];
+                    });
+                    return merged;
+                  });
+                }
+              } catch (err) {
+                console.error('Failed to reload schedules:', err);
+              }
+            }}
+          />
+        </section>
+      )
+    },
+    {
+      id: 'subjects',
+      label: 'Subjects',
+      content: (
+        <section className="input-section">
+          <SubjectManagement />
+        </section>
+      )
+    },
+    {
+      id: 'scheduler',
+      label: 'Scheduler',
+      content: (
+        <>
+          <section className="input-section">
+            <SchedulerConfiguration
               onConfigChange={handleConfigChange}
               uploadedStudents={allStudentNames}
             />
@@ -270,8 +288,14 @@ function App() {
             </div>
           </section>
 
-          {schedule && (
-            <section className="output-section">
+          <section className="output-section">
+            <SavedSchedulesManager
+              scheduleData={schedule}
+              onLoadSchedule={(loadedSchedule) => {
+                setSchedule(loadedSchedule);
+              }}
+            />
+            {schedule && (
               <ScheduleDisplay
                 scheduleData={schedule}
                 workingDays={config?.workingHours?.days || []}
@@ -284,8 +308,23 @@ function App() {
                   setSchedule(updatedSchedule);
                 }}
               />
-            </section>
-          )}
+            )}
+          </section>
+        </>
+      )
+    }
+  ];
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>Student Schedule Generator</h1>
+        <p>Generate optimized weekly schedules for multiple students</p>
+      </header>
+
+      <main className="app-main">
+        <div className="app-content">
+          <Tabs activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} />
         </div>
       </main>
     </div>

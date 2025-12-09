@@ -136,3 +136,60 @@ export const permanentlyDeleteFromLog = async (studentName) => {
   return response.json();
 };
 
+// Saved Schedule Persistence API functions
+
+export const saveGeneratedSchedule = async (scheduleName, scheduleData) => {
+  const response = await fetch(`${API_BASE_URL}/saved-schedules/save`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      schedule_name: scheduleName,
+      schedule_data: scheduleData
+    }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to save schedule');
+  }
+  
+  return response.json();
+};
+
+export const listSavedSchedules = async () => {
+  const response = await fetch(`${API_BASE_URL}/saved-schedules/list`);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to list schedules');
+  }
+  
+  return response.json();
+};
+
+export const loadSavedSchedule = async (scheduleName) => {
+  const response = await fetch(`${API_BASE_URL}/saved-schedules/load/${encodeURIComponent(scheduleName)}`);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to load schedule');
+  }
+  
+  return response.json();
+};
+
+export const deleteSavedSchedule = async (scheduleName) => {
+  const response = await fetch(`${API_BASE_URL}/saved-schedules/${encodeURIComponent(scheduleName)}`, {
+    method: 'DELETE',
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete schedule');
+  }
+  
+  return response.json();
+};
+

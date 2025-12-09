@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import json
 import os
 from typing import Dict, Optional
+from datetime import datetime
 
 try:
     from .models import ScheduleRequest, ScheduleResponse, StudentSchedule, BlockedTime
@@ -42,6 +43,10 @@ app.add_middleware(
 # Create uploads directory if it doesn't exist
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
+
+# Create schedules directory if it doesn't exist
+schedules_dir = os.path.join(os.path.dirname(__file__), "schedules")
+os.makedirs(schedules_dir, exist_ok=True)
 
 # In-memory cache for file metadata (for reload detection)
 file_metadata_cache: Dict[str, float] = {}
@@ -334,6 +339,142 @@ async def permanently_delete_from_log_endpoint(student_name: str):
         return {"success": True, "message": message}
     else:
         raise HTTPException(status_code=404, detail=message)
+
+
+# Generated Schedule Persistence Endpoints
+
+class SaveScheduleRequest(BaseModel):
+    schedule_name: str
+    schedule_data: dict
+
+def sanitize_schedule_name(name: str) -> str:
+    """Sanitize schedule name for use as filename."""
+    import re
+    # Remove or replace invalid filename characters
+    sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Remove leading/trailing spaces and dots
+    sanitized = sanitized.strip('. ')
+    # Limit length
+    if len(sanitized) > 100:
+        sanitized = sanitized[:100]
+    return sanitized if sanitized else "schedule"
+
+
+@app.post("/api/saved-schedules/save")
+async def save_generated_schedule(request: SaveScheduleRequest):
+    """Save a generated schedule with a user-provided name."""
+    try:
+        # Sanitize the schedule name
+        safe_name = sanitize_schedule_name(request.schedule_name)
+        if not safe_name:
+            raise HTTPException(status_code=400, detail="Invalid schedule name")
+        
+        # Create filename
+        filename = f"{safe_name}.json"
+        file_path = os.path.join(schedules_dir, filename)
+        
+        # Check if file already exists
+        if os.path.exists(file_path):
+            raise HTTPException(status_code=409, detail=f"Schedule '{request.schedule_name}' already exists")
+        
+        # Add metadata
+        schedule_with_metadata = {
+            "name": request.schedule_name,
+            "saved_at": datetime.now().isoformat(),
+            "schedule": request.schedule_data
+        }
+        
+        # Write to file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(schedule_with_metadata, f, indent=2, ensure_ascii=False)
+        
+        return {"success": True, "message": f"Schedule '{request.schedule_name}' saved successfully", "filename": safe_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving schedule: {str(e)}")
+
+
+@app.get("/api/saved-schedules/list")
+async def list_saved_schedules():
+    """List all saved schedules with metadata."""
+    try:
+        if not os.path.exists(schedules_dir):
+            return {"schedules": []}
+        
+        schedules = []
+        for filename in os.listdir(schedules_dir):
+            if filename.endswith('.json'):
+                file_path = os.path.join(schedules_dir, filename)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    # Get file modification time
+                    mtime = os.path.getmtime(file_path)
+                    
+                    schedules.append({
+                        "filename": filename.replace('.json', ''),
+                        "name": data.get("name", filename.replace('.json', '')),
+                        "saved_at": data.get("saved_at", ""),
+                        "modified_at": datetime.fromtimestamp(mtime).isoformat(),
+                        "schedule": data.get("schedule", {})
+                    })
+                except Exception as e:
+                    # Skip corrupted files
+                    continue
+        
+        # Sort by saved_at (newest first)
+        schedules.sort(key=lambda x: x.get("saved_at", ""), reverse=True)
+        
+        return {"schedules": schedules}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing schedules: {str(e)}")
+
+
+@app.get("/api/saved-schedules/load/{schedule_name}")
+async def load_saved_schedule(schedule_name: str):
+    """Load a saved schedule by name."""
+    try:
+        safe_name = sanitize_schedule_name(schedule_name)
+        filename = f"{safe_name}.json"
+        file_path = os.path.join(schedules_dir, filename)
+        
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_name}' not found")
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        return {
+            "success": True,
+            "name": data.get("name", schedule_name),
+            "saved_at": data.get("saved_at", ""),
+            "schedule": data.get("schedule", {})
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading schedule: {str(e)}")
+
+
+@app.delete("/api/saved-schedules/{schedule_name}")
+async def delete_saved_schedule(schedule_name: str):
+    """Delete a saved schedule by name."""
+    try:
+        safe_name = sanitize_schedule_name(schedule_name)
+        filename = f"{safe_name}.json"
+        file_path = os.path.join(schedules_dir, filename)
+        
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_name}' not found")
+        
+        os.remove(file_path)
+        return {"success": True, "message": f"Schedule '{schedule_name}' deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting schedule: {str(e)}")
 
 
 if __name__ == "__main__":

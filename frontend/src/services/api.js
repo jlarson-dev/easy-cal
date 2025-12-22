@@ -1,5 +1,9 @@
-// Use relative path - nginx will proxy /api requests to backend
-const API_BASE_URL = '/api';
+// Detect if running in desktop app (localhost hostname) or web
+const isDesktop = window.location.hostname === '127.0.0.1' || 
+                 window.location.hostname === 'localhost';
+const API_BASE_URL = isDesktop 
+  ? 'http://127.0.0.1:8000/api' 
+  : '/api';
 
 export const uploadSchedule = async (file, overwrite = false) => {
   const formData = new FormData();
@@ -41,6 +45,9 @@ export const generateSchedule = async (scheduleRequest) => {
 
 export const healthCheck = async () => {
   const response = await fetch(`${API_BASE_URL}/health`);
+  if (!response.ok) {
+    throw new Error('Health check failed');
+  }
   return response.json();
 };
 

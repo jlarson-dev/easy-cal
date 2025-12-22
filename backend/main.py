@@ -1,9 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
 
@@ -33,6 +37,8 @@ app.add_middleware(
         "http://localhost:5173",  # Vite dev server
         "http://localhost:3000",  # Alternative dev port
         "http://localhost",        # Docker frontend
+        "http://127.0.0.1:8000",  # Desktop app
+        "http://localhost:8000",  # Desktop app alternative
         "http://frontend",         # Docker internal network
     ],
     allow_credentials=True,
@@ -40,12 +46,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create uploads directory if it doesn't exist
-uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
-os.makedirs(uploads_dir, exist_ok=True)
 
-# Create schedules directory if it doesn't exist
-schedules_dir = os.path.join(os.path.dirname(__file__), "schedules")
+def get_data_directory():
+    """Get writable data directory for app data.
+    
+    In PyInstaller bundle, uses platform-specific app data directories.
+    In development, uses relative paths from backend directory.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        # Use app data directory (persistent across updates)
+        if sys.platform == 'win32':
+            base = Path(os.getenv('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+        elif sys.platform == 'darwin':
+            base = Path.home() / 'Library' / 'Application Support'
+        else:
+            base = Path.home() / '.local' / 'share'
+        
+        app_data = base / "StudentScheduleGenerator"
+        app_data.mkdir(parents=True, exist_ok=True)
+        return str(app_data)
+    else:
+        # Development mode - use relative paths from backend directory
+        return os.path.dirname(__file__)
+
+
+# Create data directories
+data_dir = get_data_directory()
+uploads_dir = os.path.join(data_dir, "uploads")
+schedules_dir = os.path.join(data_dir, "schedules")
+os.makedirs(uploads_dir, exist_ok=True)
 os.makedirs(schedules_dir, exist_ok=True)
 
 # In-memory cache for file metadata (for reload detection)
@@ -475,6 +505,57 @@ async def delete_saved_schedule(schedule_name: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting schedule: {str(e)}")
+
+
+# Serve static files for desktop app
+def setup_static_files():
+    """Setup static file serving for desktop app"""
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Development mode
+        base_path = Path(__file__).parent.parent
+    
+    frontend_dist = base_path / "frontend" / "dist"
+    
+    if not frontend_dist.exists():
+        print(f"Warning: Frontend dist directory not found at {frontend_dist}")
+        return
+    
+    # Mount static assets directory
+    assets_dir = frontend_dist / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+    
+    # Serve index.html for root path (must be registered before catch-all)
+    @app.get("/")
+    async def serve_index():
+        """Serve index.html for root path"""
+        index_file = frontend_dist / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    
+    # Serve index.html for SPA routing (must be registered last, after all API routes)
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve SPA - return index.html for non-API routes"""
+        # Skip API and asset routes (they're handled by other routes)
+        if full_path.startswith("api/") or full_path.startswith("assets/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        index_file = frontend_dist / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+        raise HTTPException(status_code=404, detail="Frontend not found")
+
+
+# Setup static files if running as desktop app
+# Check if we should serve static files (desktop mode)
+_desktop_mode = os.getenv("DESKTOP_MODE", "false").lower() == "true"
+if _desktop_mode or getattr(sys, 'frozen', False):
+    setup_static_files()
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import SchedulerConfiguration from './components/SchedulerConfiguration';
 import ScheduleDisplay from './components/ScheduleDisplay';
 import SavedSchedulesManager from './components/SavedSchedulesManager';
 import Tabs from './components/Tabs';
-import { generateSchedule, loadSchedules, reloadSchedules } from './services/api';
+import { generateSchedule, loadSchedules, reloadSchedules, healthCheck } from './services/api';
 import './styles/App.css';
 
 function App() {
@@ -18,6 +18,8 @@ function App() {
   const [schedule, setSchedule] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
+  const [backendReady, setBackendReady] = useState(false);
+  const [backendLoading, setBackendLoading] = useState(true);
 
   const handleUploadSuccess = (students) => {
     setUploadedStudents(students);
@@ -34,8 +36,51 @@ function App() {
     setManagedSchedules(updatedSchedules);
   }, []);
 
-  // Auto-load schedules on startup
+  // Check if backend is ready (for desktop app)
   useEffect(() => {
+    const checkBackend = async () => {
+      const isDesktop = window.location.hostname === '127.0.0.1' || 
+                       window.location.hostname === 'localhost';
+      
+      if (!isDesktop) {
+        // Web mode - assume backend is ready
+        setBackendReady(true);
+        setBackendLoading(false);
+        return;
+      }
+
+      // Desktop mode - poll for backend
+      let attempts = 0;
+      const maxAttempts = 30;
+      const pollInterval = 500; // 500ms
+
+      const poll = async () => {
+        try {
+          await healthCheck();
+          setBackendReady(true);
+          setBackendLoading(false);
+        } catch (err) {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            setBackendLoading(false);
+            setError('Backend server failed to start. Please restart the application.');
+          } else {
+            setTimeout(poll, pollInterval);
+          }
+        }
+      };
+
+      // Start polling after a short delay
+      setTimeout(poll, 500);
+    };
+
+    checkBackend();
+  }, []);
+
+  // Auto-load schedules on startup (after backend is ready)
+  useEffect(() => {
+    if (!backendReady) return;
+
     const initializeSchedules = async () => {
       try {
         // Load schedules from uploads directory
@@ -58,7 +103,7 @@ function App() {
     };
 
     initializeSchedules();
-  }, []);
+  }, [backendReady]);
 
   const handleSchedulesReloaded = useCallback((students, changes) => {
     if (students) {
@@ -314,6 +359,41 @@ function App() {
       )
     }
   ];
+
+  // Show loading screen while backend starts (desktop mode only)
+  if (backendLoading) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>Student Schedule Generator</h1>
+          <p>Generate optimized weekly schedules for multiple students</p>
+        </header>
+        <main className="app-main">
+          <div className="app-content" style={{ textAlign: 'center', padding: '4rem' }}>
+            <div className="loading-container">
+              <h2>Starting application...</h2>
+              <p>Please wait while the backend server initializes.</p>
+              <div className="loading-spinner" style={{
+                border: '4px solid #f3f3f3',
+                borderTop: '4px solid #667eea',
+                borderRadius: '50%',
+                width: '50px',
+                height: '50px',
+                animation: 'spin 1s linear infinite',
+                margin: '2rem auto'
+              }}></div>
+              <style>{`
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app">

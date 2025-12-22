@@ -163,6 +163,69 @@ easy-cal/
 └── README.md
 ```
 
+## Desktop App
+
+The application can be built as a standalone desktop executable using PyInstaller.
+
+### Prerequisites for Desktop Build
+
+- Python 3.8 or higher
+- Node.js 16 or higher (for building frontend)
+- All Python dependencies installed
+- PyInstaller and pywebview installed
+
+### Building the Desktop App
+
+1. **Install desktop dependencies**:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+2. **Build the desktop executable**:
+   ```bash
+   cd desktop_app
+   python build.py
+   ```
+
+   This will:
+   - Build the React frontend
+   - Bundle everything into a single executable
+   - Output to `desktop_app/dist/`
+
+3. **Output files**:
+   - Windows: `dist/StudentScheduleGenerator.exe`
+   - macOS: `dist/StudentScheduleGenerator.app`
+   - Linux: `dist/StudentScheduleGenerator`
+
+### Running in Development Mode
+
+To test the desktop app before building:
+
+```bash
+cd desktop_app
+python dev.py
+```
+
+This runs the app with the webview window for testing.
+
+### Desktop App Features
+
+- **Standalone executable**: No need to install Python or Node.js
+- **Data persistence**: User data stored in platform app data directories:
+  - Windows: `%APPDATA%\StudentScheduleGenerator`
+  - macOS: `~/Library/Application Support/StudentScheduleGenerator`
+  - Linux: `~/.local/share/StudentScheduleGenerator`
+- **Native window**: Uses system webview for native look and feel
+- **Automatic backend**: Backend server starts automatically
+
+### Troubleshooting Desktop App
+
+- **Backend fails to start**: Check if port 8000 is already in use
+- **Frontend not loading**: Ensure frontend was built before creating executable
+- **Data not persisting**: Check app data directory permissions
+- **Build errors**: Ensure all dependencies are installed and frontend build succeeds
+
 ## Notes
 
 - The scheduling algorithm uses 30-minute time slots

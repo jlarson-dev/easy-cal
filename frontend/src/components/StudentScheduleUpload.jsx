@@ -120,8 +120,8 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
         </div>
       )}
       
-      <div className="help-text">
-        <p><strong>Expected JSON format:</strong></p>
+      <details className="help-text">
+        <summary><strong>Expected JSON format</strong></summary>
         <pre>{`{
   "student_name": {
     "blocked_times": [
@@ -130,7 +130,7 @@ const StudentScheduleUpload = ({ onUploadSuccess }) => {
     ]
   }
 }`}</pre>
-      </div>
+      </details>
     </div>
   );
 };

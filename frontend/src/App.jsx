@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import StudentScheduleUpload from './components/StudentScheduleUpload';
+import CreateStudentSchedule from './components/CreateStudentSchedule';
 import StudentSchedulesView from './components/StudentSchedulesView';
 import DeletedStudentsView from './components/DeletedStudentsView';
 import SubjectManagement from './components/SubjectManagement';
@@ -254,6 +255,18 @@ function App() {
       label: 'Students',
       content: (
         <section className="input-section">
+          <CreateStudentSchedule 
+            onStudentCreated={async () => {
+              // Reload schedules after creating a new student
+              try {
+                const result = await reloadSchedules();
+                handleSchedulesReloaded(result.students, result.changes);
+              } catch (err) {
+                console.error('Failed to reload schedules:', err);
+              }
+            }}
+          />
+          
           <StudentScheduleUpload onUploadSuccess={handleUploadSuccess} />
           
           <div className="reload-section">

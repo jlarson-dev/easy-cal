@@ -1,0 +1,11 @@
+{
+    "John Smith": {
+      "blocked_times": [
+        {"day": "Monday", "start": "09:00", "end": "10:00", "label": "School"},
+        {"day": "Monday", "start": "14:00", "end": "15:30", "label": "Soccer Practice"},
+        {"day": "Wednesday", "start": "13:00", "end": "14:00", "label": "Lunch"},
+        {"day": "Friday", "start": "10:00", "end": "11:00", "label": "Music Lesson"}
+      ],
+      "can_overlap": []
+    }
+  }

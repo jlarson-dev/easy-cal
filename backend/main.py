@@ -1,3 +1,54 @@
+import os
+import sys
+from pathlib import Path
+
+# Prevent GitPython from trying to find git repos in PyInstaller bundles
+if getattr(sys, 'frozen', False):
+    os.environ.setdefault("GIT_PYTHON_REFRESH", "quiet")
+    
+    # Monkey-patch git module to prevent errors when packages try to detect git repos
+    # This must be done before any imports that might use git
+    import types
+    
+    # Create exception classes first
+    class InvalidGitRepositoryError(Exception):
+        pass
+    
+    # Create a dummy Repo class that silently fails
+    class DummyRepo:
+        def __init__(self, path=None, *args, **kwargs):
+            # Silently accept any path without checking
+            self.path = path or os.getcwd()
+    
+    # Create dummy git module structure
+    dummy_git = types.ModuleType('git')
+    dummy_repo = types.ModuleType('git.repo')
+    dummy_base = types.ModuleType('git.repo.base')
+    dummy_exc = types.ModuleType('git.exc')
+    
+    # Add Repo to multiple locations to handle different import styles
+    dummy_base.Repo = DummyRepo
+    dummy_repo.Repo = DummyRepo  # Some code might import from git.repo
+    dummy_repo.base = dummy_base
+    dummy_exc.InvalidGitRepositoryError = InvalidGitRepositoryError
+    dummy_git.Repo = DummyRepo  # Some code might import Repo directly from git
+    dummy_git.repo = dummy_repo
+    dummy_git.exc = dummy_exc
+    
+    # Insert dummy modules into sys.modules before any real imports
+    sys.modules['git'] = dummy_git
+    sys.modules['git.repo'] = dummy_repo
+    sys.modules['git.repo.base'] = dummy_base
+    sys.modules['git.exc'] = dummy_exc
+    
+    # Change to a safe directory to avoid git repo detection issues
+    try:
+        cwd = os.getcwd()
+        if 'dist' in cwd or cwd.endswith('dist'):
+            os.chdir(os.path.expanduser("~"))
+    except:
+        pass
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -5,9 +56,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import json
-import os
-import sys
-from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
 

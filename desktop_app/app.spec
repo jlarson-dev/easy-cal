@@ -22,6 +22,10 @@ a = Analysis(
         'uvicorn.loops.asyncio',
         'uvicorn.loops.uvloop',
         'fastapi',
+        'fastapi.middleware',
+        'fastapi.middleware.cors',
+        'fastapi.staticfiles',
+        'fastapi.responses',
         'pydantic',
         'multipart',
     ],
@@ -57,5 +61,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='icon.ico',  # Application icon
 )
 

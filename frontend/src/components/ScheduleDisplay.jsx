@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, studentSchedules = {}, config = null, onScheduleUpdate }) => {
   const [exportFormat, setExportFormat] = useState('json');
   const [editingSlot, setEditingSlot] = useState(null);
+  const scheduleCalendarRef = useRef(null);
   const [editForm, setEditForm] = useState({
     day: '',
     start: '',
@@ -284,89 +287,270 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, s
     return Array.from(subjects).sort();
   };
 
-  const exportSchedule = () => {
-    let content = '';
-    let filename = 'schedule';
-
-    if (exportFormat === 'json') {
-      content = JSON.stringify(scheduleData, null, 2);
-      filename += '.json';
-    } else if (exportFormat === 'csv') {
-      // CSV format: Day, Start, End, Type, Student(s), Subject, Label
-      const rows = ['Day,Start,End,Type,Student(s),Subject,Label'];
-      schedule.forEach(slot => {
-        // Filter out blocked times from CSV export
-        if (slot.type === 'blocked') {
-          return;
-        }
-        const students = slot.students && slot.students.length > 0
-          ? slot.students.join('; ')
-          : (slot.student || '');
-        rows.push(
-          `${slot.day},${to12Hour(slot.start)},${to12Hour(slot.end)},${slot.type},"${students}",${slot.subject || ''},${slot.label || ''}`
-        );
-      });
-      content = rows.join('\n');
-      filename += '.csv';
+  const exportSchedule = async () => {
+    if (exportFormat === 'png') {
+      await exportPNG();
+    } else if (exportFormat === 'pdf') {
+      await exportPDF();
     } else {
-      // Text format
-      const lines = [];
-      workingDays.forEach(day => {
-        lines.push(`\n${day}:`);
-        lines.push('─'.repeat(50));
-        scheduleByDay[day]?.forEach(slot => {
-          // Filter out blocked times from text export
+      // Text-based exports (JSON, CSV, Text)
+      let content = '';
+      let filename = 'schedule';
+
+      if (exportFormat === 'json') {
+        content = JSON.stringify(scheduleData, null, 2);
+        filename += '.json';
+      } else if (exportFormat === 'csv') {
+        // CSV format: Day, Start, End, Type, Student(s), Subject, Label
+        const rows = ['Day,Start,End,Type,Student(s),Subject,Label'];
+        schedule.forEach(slot => {
+          // Filter out blocked times from CSV export
           if (slot.type === 'blocked') {
             return;
           }
-          if (slot.type === 'session') {
-            const students = slot.students && slot.students.length > 0
-              ? slot.students.join(', ')
-              : slot.student;
-            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: ${students} - ${slot.subject}`);
-          } else if (slot.type === 'lunch') {
-            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: LUNCH`);
-          } else if (slot.type === 'prep') {
-            lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: PREP TIME`);
-          }
+          const students = slot.students && slot.students.length > 0
+            ? slot.students.join('; ')
+            : (slot.student || '');
+          rows.push(
+            `${slot.day},${to12Hour(slot.start)},${to12Hour(slot.end)},${slot.type},"${students}",${slot.subject || ''},${slot.label || ''}`
+          );
         });
-      });
-      content = lines.join('\n');
-      filename += '.txt';
+        content = rows.join('\n');
+        filename += '.csv';
+      } else {
+        // Text format
+        const lines = [];
+        workingDays.forEach(day => {
+          lines.push(`\n${day}:`);
+          lines.push('─'.repeat(50));
+          scheduleByDay[day]?.forEach(slot => {
+            // Filter out blocked times from text export
+            if (slot.type === 'blocked') {
+              return;
+            }
+            if (slot.type === 'session') {
+              const students = slot.students && slot.students.length > 0
+                ? slot.students.join(', ')
+                : slot.student;
+              lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: ${students} - ${slot.subject}`);
+            } else if (slot.type === 'lunch') {
+              lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: LUNCH`);
+            } else if (slot.type === 'prep') {
+              lines.push(`  ${to12Hour(slot.start)} - ${to12Hour(slot.end)}: PREP TIME`);
+            }
+          });
+        });
+        content = lines.join('\n');
+        filename += '.txt';
+      }
+
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const exportPNG = async () => {
+    if (!scheduleCalendarRef.current) {
+      alert('Unable to export schedule as PNG');
+      return;
     }
 
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      // Hide export section and legend during capture (they're siblings of the ref)
+      const scheduleDisplay = scheduleCalendarRef.current.parentElement;
+      const exportSection = scheduleDisplay?.querySelector('.export-section');
+      const legend = scheduleDisplay?.querySelector('.legend');
+      const exportSectionDisplay = exportSection?.style.display;
+      const legendDisplay = legend?.style.display;
+      
+      if (exportSection) exportSection.style.display = 'none';
+      if (legend) legend.style.display = 'none';
+
+      // Capture the schedule (header, conflicts, and calendar)
+      const canvas = await html2canvas(scheduleCalendarRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher quality
+        logging: false
+      });
+
+      // Restore display
+      if (exportSection) exportSection.style.display = exportSectionDisplay || '';
+      if (legend) legend.style.display = legendDisplay || '';
+
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'schedule.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } catch (error) {
+      console.error('Error exporting PNG:', error);
+      alert('Failed to export schedule as PNG. Please try again.');
+    }
+  };
+
+  const exportPDF = async () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      let yPos = 20;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - (margin * 2);
+
+      // Title
+      doc.setFontSize(18);
+      doc.text('Student Schedule', margin, yPos);
+      yPos += 10;
+
+      // Status message
+      doc.setFontSize(10);
+      if (success) {
+        doc.setTextColor(0, 128, 0);
+      } else {
+        doc.setTextColor(255, 128, 0);
+      }
+      doc.text(`${success ? '✓' : '⚠'} ${message}`, margin, yPos);
+      doc.setTextColor(0, 0, 0);
+      yPos += 8;
+
+      // Conflicts section
+      if (conflicts && conflicts.length > 0) {
+        doc.setFontSize(12);
+        doc.text('Conflicts / Unmet Requirements:', margin, yPos);
+        yPos += 6;
+        doc.setFontSize(9);
+        conflicts.forEach(conflict => {
+          const lines = doc.splitTextToSize(conflict, contentWidth);
+          if (yPos + (lines.length * 5) > pageHeight - margin) {
+            doc.addPage();
+            yPos = margin;
+          }
+          doc.text(lines, margin + 5, yPos);
+          yPos += lines.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Schedule by day
+      doc.setFontSize(12);
+      workingDays.forEach((day, dayIndex) => {
+        // Check if we need a new page
+        if (yPos > pageHeight - 40) {
+          doc.addPage();
+          yPos = margin;
+        }
+
+        // Day header
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text(day, margin, yPos);
+        doc.setFont(undefined, 'normal');
+        yPos += 7;
+
+        // Schedule slots for this day
+        const daySlots = scheduleByDay[day] || [];
+        if (daySlots.length === 0) {
+          doc.setFontSize(9);
+          doc.setTextColor(128, 128, 128);
+          doc.text('  No scheduled activities', margin + 5, yPos);
+          doc.setTextColor(0, 0, 0);
+          yPos += 6;
+        } else {
+          doc.setFontSize(9);
+          daySlots.forEach(slot => {
+            // Check if we need a new page
+            if (yPos > pageHeight - 15) {
+              doc.addPage();
+              yPos = margin;
+            }
+
+            const timeRange = `${to12Hour(slot.start)} - ${to12Hour(slot.end)}`;
+            let slotText = '';
+
+            if (slot.type === 'session') {
+              const students = slot.students && slot.students.length > 0
+                ? slot.students.join(', ')
+                : slot.student;
+              slotText = `  ${timeRange}: ${students} - ${slot.subject || ''}`;
+            } else if (slot.type === 'lunch') {
+              slotText = `  ${timeRange}: LUNCH`;
+            } else if (slot.type === 'prep') {
+              slotText = `  ${timeRange}: PREP TIME`;
+            }
+
+            if (slotText) {
+              const lines = doc.splitTextToSize(slotText, contentWidth - 10);
+              doc.text(lines, margin + 5, yPos);
+              yPos += lines.length * 5;
+            }
+          });
+        }
+
+        yPos += 5; // Space between days
+      })
+
+      // Add legend on last page if space permits
+      if (yPos < pageHeight - 30) {
+        yPos += 5;
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text('Legend:', margin, yPos);
+        doc.setFont(undefined, 'normal');
+        yPos += 6;
+        doc.setFontSize(8);
+        doc.text('  • Sessions: Color-coded by student', margin + 5, yPos);
+        yPos += 4;
+        doc.text('  • Lunch: 30 minutes', margin + 5, yPos);
+        yPos += 4;
+        doc.text('  • Prep: Flexible prep time', margin + 5, yPos);
+      }
+
+      // Save PDF
+      doc.save('schedule.pdf');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export schedule as PDF. Please try again.');
+    }
   };
 
   return (
     <div className="schedule-display">
-      <div className="schedule-header">
-        <h2>Generated Schedule</h2>
-        <div className="status-indicator">
-          <span className={success ? 'status success' : 'status warning'}>
-            {success ? '✓' : '⚠'} {message}
-          </span>
+      <div ref={scheduleCalendarRef}>
+        <div className="schedule-header">
+          <h2>Generated Schedule</h2>
+          <div className="status-indicator">
+            <span className={success ? 'status success' : 'status warning'}>
+              {success ? '✓' : '⚠'} {message}
+            </span>
+          </div>
         </div>
-      </div>
 
-      {conflicts && conflicts.length > 0 && (
-        <div className="conflicts">
-          <h3>Conflicts / Unmet Requirements:</h3>
-          <ul>
-            {conflicts.map((conflict, index) => (
-              <li key={index} className="conflict-item">{conflict}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {conflicts && conflicts.length > 0 && (
+          <div className="conflicts">
+            <h3>Conflicts / Unmet Requirements:</h3>
+            <ul>
+              {conflicts.map((conflict, index) => (
+                <li key={index} className="conflict-item">{conflict}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      <div className="schedule-calendar">
+        <div className="schedule-calendar">
         {workingDays.map(day => (
           <div key={day} className="day-column">
             <h3>{day}</h3>
@@ -415,6 +599,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, s
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       <div className="export-section">
@@ -424,6 +609,8 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, s
             <option value="json">JSON</option>
             <option value="csv">CSV</option>
             <option value="text">Text</option>
+            <option value="png">PNG</option>
+            <option value="pdf">PDF</option>
           </select>
           <button onClick={exportSchedule}>Export</button>
         </div>

@@ -1,0 +1,25 @@
+{
+  "students": {
+    "Alice": { "blocked_times": [], "can_overlap": [] }
+  },
+  "student_configs": [
+    {
+      "name": "Alice",
+      "subjects": [
+        {
+          "name": "Reading",
+          "constraint_type": "weekly",
+          "weekly_days": 3,
+          "weekly_minutes_per_session": 60
+        }
+      ]
+    }
+  ],
+  "working_hours": {
+    "days": ["Monday"],
+    "start_time": "09:00",
+    "end_time": "10:00"
+  },
+  "lunch_time": "09:00",
+  "prep_time_required": false
+}

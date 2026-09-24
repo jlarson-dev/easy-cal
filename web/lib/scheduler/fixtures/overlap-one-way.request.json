@@ -1,0 +1,35 @@
+{
+  "students": {
+    "Alice": { "blocked_times": [], "can_overlap": ["Bob"] },
+    "Bob": { "blocked_times": [], "can_overlap": [] }
+  },
+  "student_configs": [
+    {
+      "name": "Alice",
+      "subjects": [
+        {
+          "name": "Math",
+          "constraint_type": "daily",
+          "daily_minutes": 30
+        }
+      ]
+    },
+    {
+      "name": "Bob",
+      "subjects": [
+        {
+          "name": "Math",
+          "constraint_type": "daily",
+          "daily_minutes": 30
+        }
+      ]
+    }
+  ],
+  "working_hours": {
+    "days": ["Monday"],
+    "start_time": "09:00",
+    "end_time": "12:00"
+  },
+  "lunch_time": "11:00",
+  "prep_time_required": false
+}

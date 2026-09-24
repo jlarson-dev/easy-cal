@@ -203,7 +203,7 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
         schedule.append(TimeSlot(
             day=day,
             start=request.lunch_time,
-            end=minutes_to_time(lunch_mins + 60),
+            end=minutes_to_time(lunch_mins + 30),
             type="lunch"
         ))
         
@@ -228,7 +228,7 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
         
         # Add lunch as blocked time (prep will be scheduled flexibly later)
         lunch_start = lunch_mins
-        lunch_end = lunch_mins + 60
+        lunch_end = lunch_mins + 30
         
         # Add lunch blocked slots
         current = lunch_start
@@ -362,7 +362,7 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                     
                     # Check lunch overlap
                     lunch_start_mins = lunch_mins
-                    lunch_end_mins = lunch_mins + 60
+                    lunch_end_mins = lunch_mins + 30
                     overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
                     if overlaps_lunch:
                         continue
@@ -495,7 +495,7 @@ def generate_schedule(request: ScheduleRequest) -> ScheduleResponse:
                     
                     # Check lunch overlap
                     lunch_start_mins = lunch_mins
-                    lunch_end_mins = lunch_mins + 60
+                    lunch_end_mins = lunch_mins + 30
                     overlaps_lunch = not (slot_end_mins <= lunch_start_mins or slot_start_mins >= lunch_end_mins)
                     if overlaps_lunch:
                         continue

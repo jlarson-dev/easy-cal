@@ -1,8 +1,10 @@
+"use client";
+
 import React, { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, studentSchedules = {}, config = null, onScheduleUpdate }) => {
+const ScheduleDisplay = ({ scheduleData, workingDays, studentColors, studentSchedules, config, onScheduleUpdate }) => {
   const [exportFormat, setExportFormat] = useState('json');
   const [editingSlot, setEditingSlot] = useState(null);
   const scheduleCalendarRef = useRef(null);
@@ -392,7 +394,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, s
         URL.revokeObjectURL(url);
       }, 'image/png');
     } catch (error) {
-      console.error('Error exporting PNG:', error);
+      console.error("PNG export failed");
       alert('Failed to export schedule as PNG. Please try again.');
     }
   };
@@ -522,7 +524,7 @@ const ScheduleDisplay = ({ scheduleData, workingDays = [], studentColors = {}, s
       // Save PDF
       doc.save('schedule.pdf');
     } catch (error) {
-      console.error('Error exporting PDF:', error);
+      console.error("PDF export failed");
       alert('Failed to export schedule as PDF. Please try again.');
     }
   };

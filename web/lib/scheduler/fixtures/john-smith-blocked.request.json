@@ -1,0 +1,38 @@
+{
+  "students": {
+    "John Smith": {
+      "blocked_times": [
+        { "day": "Monday", "start": "09:00", "end": "10:00", "label": "School" },
+        { "day": "Monday", "start": "14:00", "end": "15:30", "label": "Soccer Practice" },
+        { "day": "Wednesday", "start": "13:00", "end": "14:00", "label": "Lunch" },
+        { "day": "Friday", "start": "10:00", "end": "11:00", "label": "Music Lesson" }
+      ],
+      "can_overlap": []
+    }
+  },
+  "student_configs": [
+    {
+      "name": "John Smith",
+      "subjects": [
+        {
+          "name": "Math",
+          "constraint_type": "daily",
+          "daily_minutes": 60
+        },
+        {
+          "name": "Language",
+          "constraint_type": "weekly",
+          "weekly_days": 2,
+          "weekly_minutes_per_session": 45
+        }
+      ]
+    }
+  ],
+  "working_hours": {
+    "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    "start_time": "08:00",
+    "end_time": "17:00"
+  },
+  "lunch_time": "12:00",
+  "prep_time_required": true
+}

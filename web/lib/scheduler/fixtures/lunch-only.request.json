@@ -1,0 +1,13 @@
+{
+  "students": {
+    "Alice": { "blocked_times": [], "can_overlap": [] }
+  },
+  "student_configs": [{ "name": "Alice", "subjects": [] }],
+  "working_hours": {
+    "days": ["Monday", "Wednesday"],
+    "start_time": "09:00",
+    "end_time": "15:00"
+  },
+  "lunch_time": "12:00",
+  "prep_time_required": false
+}

@@ -2,6 +2,8 @@
 
 A locally-hosted web application that generates optimized weekly schedules for tutoring multiple students, accounting for student availability, subject requirements, and fixed breaks.
 
+**Web app (in progress):** the hosted Clerk version lives in [`web/`](web/). Run `cd web && npm install && npm run dev`, then open http://localhost:3000.
+
 ## Features
 
 - **Student Schedule Upload**: Upload JSON files containing student blocked time slots
